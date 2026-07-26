@@ -3,14 +3,27 @@ services:
     name: ecoloop-building-agent
     env: python
     buildCommand: |
-      mkdir -p /tmp/EnergyPlus && curl -sSL https://github.com/NREL/EnergyPlus/releases/download/v26.1.0/EnergyPlus-26.1.0-6f2e40d102-Linux-ubuntu22.04-x86_64.tar.gz | tar -xz --strip-components=1 -C /tmp/EnergyPlus && \
-      pip install --upgrade pip setuptools wheel && \
-      pip install -r requirements.txt && \
+      pip install --upgrade pip setuptools wheel &&
+      pip install -r requirements.txt &&
       cd frontend && npm install && npm run build
-    startCommand: python server/api_server.py
+    startCommand: |
+      bash -c "
+        if [ ! -f /tmp/EnergyPlus/energyplus ]; then
+          echo '[*] Installing EnergyPlus 26.1.0 to /tmp/EnergyPlus...' &&
+          mkdir -p /tmp/EnergyPlus &&
+          curl -sSL https://github.com/NREL/EnergyPlus/releases/download/v26.1.0/EnergyPlus-26.1.0-6f2e40d102-Linux-ubuntu22.04-x86_64.tar.gz \
+            | tar -xz --strip-components=1 -C /tmp/EnergyPlus &&
+          echo '[+] EnergyPlus installed successfully.'
+        else
+          echo '[+] EnergyPlus already installed at /tmp/EnergyPlus, skipping download.'
+        fi &&
+        export PYTHONPATH=/tmp/EnergyPlus:$PYTHONPATH &&
+        export LD_LIBRARY_PATH=/tmp/EnergyPlus:$LD_LIBRARY_PATH &&
+        python server/api_server.py
+      "
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: "3.11.0"
       - key: PYTHONPATH
         value: /tmp/EnergyPlus
       - key: LD_LIBRARY_PATH
