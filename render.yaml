@@ -1,0 +1,17 @@
+# Render Blueprint Spec for EcoLoop Building Agent
+# 1-Click Deployment Specification for Render.com
+
+services:
+  - type: web
+    name: ecoloop-building-agent
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r server/requirements.txt && cd frontend && npm install && npm run build"
+    startCommand: "python server/api_server.py"
+    envVars:
+
+      - key: PORT
+        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11.0
