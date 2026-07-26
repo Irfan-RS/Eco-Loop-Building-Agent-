@@ -74,15 +74,27 @@ def resolve_weather_file(name=None) -> Path:
     return WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
 
 # ==========================================================
-# EnergyPlus Installation
+# EnergyPlus Installation (Cross-Platform Windows & Linux)
 # ==========================================================
-ENERGYPLUS_HOME = Path(r"C:\EnergyPlusV26-1-0")
+import platform
+
+if platform.system() == "Windows":
+    ENERGYPLUS_HOME = Path(r"C:\EnergyPlusV26-1-0")
+    ENERGYPLUS_EXE = ENERGYPLUS_HOME / "energyplus.exe"
+else:
+    # Linux / Cloud Host (e.g. Render / Ubuntu)
+    linux_paths = [
+        BASE_DIR / "energyplus_bin",
+        Path("/usr/local/EnergyPlus-26-1-0"),
+        Path("/opt/energyplus"),
+        Path("/tmp/EnergyPlus-26-1-0"),
+    ]
+    ENERGYPLUS_HOME = next((p for p in linux_paths if p.exists()), BASE_DIR / "energyplus_bin")
+    ENERGYPLUS_EXE = ENERGYPLUS_HOME / "energyplus"
 
 # Add pyenergyplus to Python path
-sys.path.insert(0, str(ENERGYPLUS_HOME))
-
-# EnergyPlus executable
-ENERGYPLUS_EXE = ENERGYPLUS_HOME / "energyplus.exe"
+if str(ENERGYPLUS_HOME) not in sys.path and ENERGYPLUS_HOME.exists():
+    sys.path.insert(0, str(ENERGYPLUS_HOME))
 
 # EnergyPlus dictionary (required by eppy)
-IDD_FILE = ENERGYPLUS_HOME / "Energy+.idd"
+IDD_FILE = ENERGYPLUS_HOME / "Energy+.idd"
