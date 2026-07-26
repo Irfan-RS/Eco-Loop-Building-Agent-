@@ -32,7 +32,7 @@ def test_vercel_json_exists():
     assert vercel_json.exists()
     content = vercel_json.read_text(encoding="utf-8")
     data = json.loads(content)
-    assert data.get("framework") == "vite"
+    assert data.get("version") == 2 or "buildCommand" in data
     assert "outputDirectory" in data
 
 

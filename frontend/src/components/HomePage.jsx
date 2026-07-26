@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Cpu, Play, ShieldCheck, Zap, Thermometer, Layers, Building2, CloudSun, Timer, ArrowRight, Sparkles, SlidersHorizontal, BrainCircuit, Activity } from 'lucide-react';
 
 export default function HomePage({ onCalculate, isSimulating, availableModels = [], availableWeather = [] }) {
-  const modelsList = availableModels.length > 0 ? availableModels : ['5ZoneAirCooled.idf', 'ASHRAE901_OfficeMedium_STD2019_Denver.idf', 'Supermarket_Detailed.idf'];
-  const weatherList = availableWeather.length > 0 ? availableWeather : ['USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw', 'USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw', 'USA_VA_Sterling-Washington.Dulles.Intl.AP.724030_TMY3.epw'];
+  const modelsList = availableModels.length > 0 ? availableModels : ['5ZoneAirCooled.idf'];
+  const weatherList = availableWeather.length > 0 ? availableWeather : ['USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw'];
 
   const [selectedModel, setSelectedModel] = useState(modelsList[0]);
   const [selectedWeather, setSelectedWeather] = useState(weatherList[0]);

@@ -19,8 +19,8 @@ export default function App() {
   const [analyticsTab, setAnalyticsTab] = useState('zone-analytics');
   const [metrics, setMetrics] = useState(null);
   const [modelInfo, setModelInfo] = useState(null);
-  const [availableModels, setAvailableModels] = useState(['5ZoneAirCooled.idf', 'ASHRAE901_OfficeMedium.idf']);
-  const [availableWeather, setAvailableWeather] = useState(['Chicago_OHare_TMY3.epw', 'San_Francisco_TMY3.epw']);
+  const [availableModels, setAvailableModels] = useState(['5ZoneAirCooled.idf']);
+  const [availableWeather, setAvailableWeather] = useState(['USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw']);
   const [loading, setLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -54,7 +54,7 @@ export default function App() {
     const saved = sessionStorage.getItem('ecoloop_active_config');
     return saved ? JSON.parse(saved) : {
       model: '5ZoneAirCooled.idf',
-      weather: 'Chicago_OHare_TMY3.epw',
+      weather: 'USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw',
       period: '5days'
     };
   });

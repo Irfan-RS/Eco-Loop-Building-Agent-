@@ -31,47 +31,21 @@ WEATHER_FILE = WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
 
 
 def resolve_idf_file(name=None) -> Path:
-    if isinstance(name, Path):
-        if name.exists():
-            return name
-        name = name.name
-
-    if not name or name == "5ZoneAirCooled.idf":
-        return IDF_DIR / "5ZoneAirCooled.idf"
-
-    name_str = str(name)
-    if "OfficeMedium" in name_str or "ASHRAE" in name_str:
-        target = IDF_DIR / "ASHRAE901_OfficeMedium_STD2019_Denver.idf"
-        if target.exists():
-            return target
-
-    target = IDF_DIR / name_str
+    if isinstance(name, Path) and name.exists():
+        return name
+    target = IDF_DIR / "5ZoneAirCooled.idf"
     if target.exists():
         return target
-
-    return IDF_DIR / "5ZoneAirCooled.idf"
+    return IDF_FILE
 
 
 def resolve_weather_file(name=None) -> Path:
-    if isinstance(name, Path):
-        if name.exists():
-            return name
-        name = name.name
-
-    if not name or "Chicago" in str(name):
-        return WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
-
-    name_str = str(name)
-    if any(loc in name_str for loc in ["San_Francisco", "San.Francisco", "San Francisco"]):
-        target = WEATHER_DIR / "USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw"
-        if target.exists():
-            return target
-
-    target = WEATHER_DIR / name_str
+    if isinstance(name, Path) and name.exists():
+        return name
+    target = WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
     if target.exists():
         return target
-
-    return WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
+    return WEATHER_FILE
 
 # ==========================================================
 # EnergyPlus Installation (Cross-Platform Windows & Linux)

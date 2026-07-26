@@ -52,7 +52,7 @@ The agent reads simulation telemetry every 15-minute timestep, evaluates energy/
 ### 1. Simulation Engine — EnergyPlus
 - Serves as the **physics-based "digital twin"** of commercial building structures.
 - Integrated into Python using **PyEnergyPlus C API callbacks** (`callback_begin_zone_timestep_after_init_heat_balance`) and **`eppy`** IDF object manipulation.
-- Processes `.idf` building model files (`5ZoneAirCooled.idf`, `ASHRAE901_OfficeMedium.idf`) and `.epw` weather data streams (Chicago, San Francisco TMY3).
+- Dynamically parses real building thermal zones (`SPACE1-1`, `SPACE2-1`, `SPACE3-1`, `SPACE4-1`, `SPACE5-1`), schedules, and equipment parameters directly from `5ZoneAirCooled.idf` with `USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw` weather data streams.
 
 ### 2. Cognitive Engine — Open-Source LLM + MCP Protocol
 - Deploys a local/self-hosted open-source LLM (**Llama 3.1 8B** via Ollama / local OSS server API).

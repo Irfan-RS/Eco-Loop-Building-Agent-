@@ -31,25 +31,11 @@ def test_building_discovery_default():
     assert len(schedules) > 0
 
 
-def test_building_discovery_office_medium():
-    bd = BuildingDiscovery("ASHRAE901_OfficeMedium_STD2019_Denver.idf")
-    zones = bd.get_zones()
-    assert len(zones) > 0
-
-    schedules = bd.get_schedules()
-    assert len(schedules) > 0
-
-
 def test_building_class_zone_discovery():
     b1 = Building("5ZoneAirCooled.idf")
     zones1 = b1.discover_zones()
     assert len(zones1) == 6
     assert "SPACE1-1" in zones1
-
-
-    b2 = Building("ASHRAE901_OfficeMedium_STD2019_Denver.idf")
-    zones2 = b2.discover_zones()
-    assert len(zones2) > 0
 
 
 class DummyAPI:
