@@ -314,8 +314,17 @@ def get_metrics(model: str = None, weather: str = None):
     """Return time-series metrics and summary KPIs for Baseline vs AI-Controlled runs."""
     target_model = model or active_config["model"]
     target_weather = weather or active_config["weather"]
+
+    # While simulation is actively running, don't serve partial/stale data
+    if _sim_state.get("running"):
+        return {
+            "status": "running",
+            "message": "Simulation in progress — data will be available once complete.",
+            "active_config": active_config,
+        }
+
     meta_file = outputs_folder / "latest_run_meta.json"
-    
+
     # Check if latest_run_meta exists and matches requested model & weather
     if meta_file.exists():
         try:
@@ -400,6 +409,8 @@ def get_metrics(model: str = None, weather: str = None):
     loc = get_location_metadata(active_config["weather"])
     return {
         "status": "success",
+        "data_model": target_model,          # Which model this data belongs to
+        "data_weather": target_weather,       # Which weather file this data belongs to
         "active_config": active_config,
         "location": loc,
         "summary": summary,

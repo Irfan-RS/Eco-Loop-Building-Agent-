@@ -1,0 +1,19 @@
+{
+  "model": "ASHRAE901_OfficeMedium_STD2019_Denver.idf",
+  "weather": "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw",
+  "period": "5days",
+  "status": "completed",
+  "completed_at": 1785080035.0608869,
+  "results": {
+    "baseline_kwh": 49957.19,
+    "ai_controlled_kwh": 38842.53,
+    "kwh_saved": 11114.66,
+    "energy_savings_pct": 22.2,
+    "baseline_peak_kw": 69.5,
+    "ai_peak_kw": 48.04,
+    "peak_kw_reduction": 21.46,
+    "peak_pct_cut": 30.9,
+    "co2_saved_kg": 4668.16,
+    "ai_comfort_compliance_pct": 96.7
+  }
+}

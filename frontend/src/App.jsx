@@ -88,21 +88,28 @@ export default function App() {
     sessionStorage.setItem('ecoloop_active_config', JSON.stringify(activeConfig));
   }, [activeConfig]);
 
-  const fetchData = async (showSpinner = false) => {
+  const fetchData = async (showSpinner = false, configOverride = null) => {
     try {
       if (showSpinner) setLoading(true);
+      const cfg = configOverride || activeConfig;
       const cacheBuster = Date.now();
-      const modelParam = encodeURIComponent(activeConfig.model);
-      const weatherParam = encodeURIComponent(activeConfig.weather);
+      const modelParam = encodeURIComponent(cfg.model);
+      const weatherParam = encodeURIComponent(cfg.weather);
       const [resMetrics, resModel] = await Promise.all([
         fetch(`${API_BASE}/api/metrics?model=${modelParam}&weather=${weatherParam}&t=${cacheBuster}`).then(r => r.json()),
         fetch(`${API_BASE}/api/building-model?model=${modelParam}&t=${cacheBuster}`).then(r => r.json()),
       ]);
 
       if (resMetrics.status === 'success') {
-        setMetrics(resMetrics);
+        // Guard: only show data that belongs to the currently selected model+weather
+        if (resMetrics.data_model === cfg.model && resMetrics.data_weather === cfg.weather) {
+          setMetrics(resMetrics);
+        } else {
+          // Data is for a different config — clear to avoid stale display
+          setMetrics(null);
+        }
       } else {
-        // No data yet — don't show stale/dummy, keep metrics null
+        // no_data or running — keep metrics null so "Click Calculate" state shows
         setMetrics(null);
       }
       if (resModel.status === 'success') setModelInfo(resModel);
@@ -112,6 +119,7 @@ export default function App() {
       if (showSpinner) setLoading(false);
     }
   };
+
 
   useEffect(() => {
     // On initial load: fetch silently (no spinner), just populate if data exists
@@ -217,11 +225,12 @@ export default function App() {
           sse.close();
           setIsSimulating(false);
           setLoading(false);
-          // 4. Fetch the newly written CSV metrics to populate charts/analytics
-          await fetchData(false);
+          // 4. Fetch the newly written CSV metrics — pass newConfig so we validate against current selection
+          await fetchData(false, newConfig);
         }
       } catch (_) {}
     }, 2000);
+
   };
 
 
