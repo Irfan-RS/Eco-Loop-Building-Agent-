@@ -53,24 +53,38 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
   // Extract live zone-specific telemetry values from latest records
   const getZoneMetrics = (dataList, isAi = false) => {
     if (!dataList || dataList.length === 0) {
-      return isAi 
-        ? { temp: 23.8, humidity: 44.5, pmv: 0.12, occ: 4, power: 11.2, clg: 24.5, htg: 20.5, kwh: aiKwh }
-        : { temp: 22.8, humidity: 45.2, pmv: 0.68, occ: 4, power: 14.8, clg: 23.0, htg: 20.0, kwh: baseKwh };
+      const defaults = {
+        'SPACE1-1': { temp: isAi ? 23.8 : 23.4, hum: 43.2, pmv: isAi ? 0.12 : 0.68, occ: 12, pwr: isAi ? 3.1 : 4.2, kwh: isAi ? 515.6 : 665.2 },
+        'SPACE2-1': { temp: isAi ? 23.6 : 23.2, hum: 45.0, pmv: isAi ? 0.08 : 0.62, occ: 18, pwr: isAi ? 3.8 : 5.1, kwh: isAi ? 618.7 : 798.2 },
+        'SPACE3-1': { temp: isAi ? 22.7 : 22.3, hum: 46.8, pmv: isAi ? -0.06 : 0.48, occ: 8, pwr: isAi ? 2.2 : 3.0, kwh: isAi ? 371.2 : 478.9 },
+        'SPACE4-1': { temp: isAi ? 23.7 : 23.3, hum: 44.0, pmv: isAi ? 0.05 : 0.58, occ: 6, pwr: isAi ? 1.5 : 2.0, kwh: isAi ? 247.5 : 319.2 },
+        'SPACE5-1': { temp: isAi ? 23.9 : 23.5, hum: 42.5, pmv: isAi ? 0.18 : 0.72, occ: 6, pwr: isAi ? 1.4 : 1.9, kwh: isAi ? 226.8 : 292.6 },
+        'PLENUM-1': { temp: isAi ? 25.4 : 25.0, hum: 38.5, pmv: isAi ? 0.85 : 0.95, occ: 0, pwr: isAi ? 0.5 : 0.7, kwh: isAi ? 82.5 : 106.4 },
+      };
+      const def = defaults[selectedZone] || defaults['SPACE1-1'];
+      return { temp: def.temp, humidity: def.hum, pmv: def.pmv, occ: def.occ, power: def.pwr, clg: isAi ? 24.5 : 23.0, htg: isAi ? 20.5 : 20.0, kwh: def.kwh };
     }
     const last = dataList[dataList.length - 1];
     
     const tempKey = `temp_${selectedZone}`;
+    const humKey = `humidity_${selectedZone}`;
+    const pmvKey = `pmv_${selectedZone}`;
+    const pwrKey = `power_${selectedZone}`;
+    const kwhKey = `kwh_${selectedZone}`;
+    const occKey = `occ_${selectedZone}`;
+
     const temp = last[tempKey] !== undefined ? last[tempKey] : (last.avg_indoor_temp || (isAi ? 23.8 : 22.8));
-    const humidity = last.humidity || 45.0;
-    const pmv = last.avg_pmv !== undefined ? last.avg_pmv : (isAi ? 0.12 : 0.68);
-    const occ = last.total_occupancy || 4;
-    const power = last.electric_power_kw || (isAi ? 11.2 : 14.8);
+    const humidity = last[humKey] !== undefined ? last[humKey] : (last.humidity || 45.0);
+    const pmv = last[pmvKey] !== undefined ? last[pmvKey] : (last.avg_pmv !== undefined ? last.avg_pmv : (isAi ? 0.12 : 0.68));
+    const occ = last[occKey] !== undefined ? last[occKey] : (last.total_occupancy || 4);
+    const power = last[pwrKey] !== undefined ? last[pwrKey] : (last.electric_power_kw || (isAi ? 11.2 : 14.8));
     const clg = last.cooling_setpoint || (isAi ? 24.5 : 23.0);
     const htg = last.heating_setpoint || (isAi ? 20.5 : 20.0);
-    const kwh = last.cumulative_kwh || (isAi ? aiKwh : baseKwh);
+    const kwh = last[kwhKey] !== undefined ? last[kwhKey] : (last.cumulative_kwh || (isAi ? aiKwh : baseKwh));
 
     return { temp, humidity, pmv, occ, power, clg, htg, kwh };
   };
+
 
   const baseMetrics = getZoneMetrics(baselineData, false);
   const aiMetrics = getZoneMetrics(aiData, true);

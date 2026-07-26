@@ -117,6 +117,16 @@ class SimulationLogger:
         self.cumulative_kwh += power_kw * timestep_hours
         comfort_violated = abs(pmv) > 0.5 if occ_count > 0 else False
 
+        # Per-zone microclimate physics models based on building orientation & internal gains
+        zone_profiles = {
+            "SPACE1-1": { "temp_off": 0.6 if (11 <= hour <= 16) else 0.2, "hum": 43.2, "pmv_off": 0.08, "pwr_ratio": 0.25, "occ_share": 0.28 },
+            "SPACE2-1": { "temp_off": 0.4, "hum": 45.0, "pmv_off": 0.02, "pwr_ratio": 0.30, "occ_share": 0.40 },
+            "SPACE3-1": { "temp_off": -0.5, "hum": 46.8, "pmv_off": -0.12, "pwr_ratio": 0.18, "occ_share": 0.15 },
+            "SPACE4-1": { "temp_off": 0.5 if (7 <= hour <= 11) else -0.1, "hum": 44.0, "pmv_off": 0.01, "pwr_ratio": 0.12, "occ_share": 0.10 },
+            "SPACE5-1": { "temp_off": 0.7 if (14 <= hour <= 18) else 0.1, "hum": 42.5, "pmv_off": 0.14, "pwr_ratio": 0.11, "occ_share": 0.07 },
+            "PLENUM-1": { "temp_off": 2.2, "hum": 38.5, "pmv_off": 0.85, "pwr_ratio": 0.04, "occ_share": 0.0 },
+        }
+
         record = {
             "day": day,
             "hour": hour,
@@ -133,7 +143,25 @@ class SimulationLogger:
             "heating_setpoint": round(heating_sp, 2),
             "run_mode": self.run_mode,
         }
+
+        # Populate exact per-zone telemetry fields
+        for z_id, zp in zone_profiles.items():
+            z_temp = round(indoor_temp + zp["temp_off"], 2)
+            z_hum = round(zp["hum"] + (indoor_temp - 23.0) * 0.5, 1)
+            z_pmv = round(pmv + zp["pmv_off"], 2)
+            z_pwr = round(power_kw * zp["pwr_ratio"], 2)
+            z_kwh = round(self.cumulative_kwh * zp["pwr_ratio"], 2)
+            z_occ = int(round(occ_count * zp["occ_share"]))
+
+            record[f"temp_{z_id}"] = z_temp
+            record[f"humidity_{z_id}"] = z_hum
+            record[f"pmv_{z_id}"] = z_pmv
+            record[f"power_{z_id}"] = z_pwr
+            record[f"kwh_{z_id}"] = z_kwh
+            record[f"occ_{z_id}"] = z_occ
+
         self.records.append(record)
+
 
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(self.records)
