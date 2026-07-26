@@ -83,14 +83,17 @@ if platform.system() == "Windows":
     ENERGYPLUS_EXE = ENERGYPLUS_HOME / "energyplus.exe"
 else:
     # Linux / Cloud Host (e.g. Render / Ubuntu)
-    found_tmp = list(Path("/tmp").glob("EnergyPlus*")) if Path("/tmp").exists() else []
-    linux_paths = found_tmp + [
+    linux_paths = [
+        Path("/tmp/EnergyPlus"),
         BASE_DIR / "energyplus_bin",
         Path("/usr/local/EnergyPlus-26-1-0"),
         Path("/opt/energyplus"),
     ]
-    ENERGYPLUS_HOME = next((p for p in linux_paths if p.exists()), BASE_DIR / "energyplus_bin")
+    found_tmp = [p for p in Path("/tmp").glob("EnergyPlus*") if p.is_dir()] if Path("/tmp").exists() else []
+    linux_paths = linux_paths + found_tmp
+    ENERGYPLUS_HOME = next((p for p in linux_paths if p.exists()), Path("/tmp/EnergyPlus"))
     ENERGYPLUS_EXE = ENERGYPLUS_HOME / "energyplus"
+
 
 
 # Add pyenergyplus to Python path

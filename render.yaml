@@ -3,7 +3,7 @@ services:
     name: ecoloop-building-agent
     env: python
     buildCommand: |
-      curl -sSL https://github.com/NREL/EnergyPlus/releases/download/v26.1.0/EnergyPlus-26.1.0-6f2e40d102-Linux-ubuntu22.04-x86_64.tar.gz | tar -xz -C /tmp && \
+      mkdir -p /tmp/EnergyPlus && curl -sSL https://github.com/NREL/EnergyPlus/releases/download/v26.1.0/EnergyPlus-26.1.0-6f2e40d102-Linux-ubuntu22.04-x86_64.tar.gz | tar -xz --strip-components=1 -C /tmp/EnergyPlus && \
       pip install --upgrade pip setuptools wheel && \
       pip install -r requirements.txt && \
       cd frontend && npm install && npm run build
@@ -11,3 +11,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: PYTHONPATH
+        value: /tmp/EnergyPlus
+      - key: LD_LIBRARY_PATH
+        value: /tmp/EnergyPlus
