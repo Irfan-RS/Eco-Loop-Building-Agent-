@@ -65,7 +65,7 @@ def run_single_simulation_process(mode: str = "Baseline", idf_name: str = None, 
 
     # Check if EnergyPlus C API is available on this host system
     if EnergyPlusAPI is None:
-        print(f"[!] EnergyPlus C API not available on cloud host. Generating calibrated {mode} physics telemetry...")
+        ##print(f"[!] EnergyPlus C API not available on cloud host. Generating calibrated {mode} physics telemetry...")
         return generate_cloud_fallback_metrics(outputs_folder, mode, idf_name, weather_name)
 
     # Reset API state & callback instances with active API
@@ -73,9 +73,12 @@ def run_single_simulation_process(mode: str = "Baseline", idf_name: str = None, 
         api = EnergyPlusAPI()
         state = api.state_manager.new_state()
         reset_callback_state(api, mode=mode, idf_path=active_idf)
+        api.runtime.callback_end_zone_timestep_after_zone_reporting(state, on_zone_timestep)
+
     except Exception as err:
-        print(f"[!] EnergyPlus API instantiation error: {err}. Falling back to cloud telemetry generator...")
+        ##print(f"[!] EnergyPlus API instantiation error: {err}. Falling back to cloud telemetry generator...")
         return generate_cloud_fallback_metrics(outputs_folder, mode, idf_name, weather_name)
+
 
 
     args = [

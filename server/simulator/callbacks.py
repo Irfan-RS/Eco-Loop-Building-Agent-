@@ -7,17 +7,17 @@ from simulator.logger import SimulationLogger
 from agent.cognitive_agent import CognitiveAgent
 
 # Instances managed per simulation run
+api_instance = None
 sensor_manager = None
 actuator_manager = None
 cognitive_agent = None
 simulation_logger = None
-
-
 active_mode = "Baseline"
 
 def reset_callback_state(active_api, mode: str = "Baseline", idf_path=None):
     """Reset managers and logger with the active EnergyPlus API instance for a new run."""
-    global sensor_manager, actuator_manager, cognitive_agent, simulation_logger, active_mode
+    global api_instance, sensor_manager, actuator_manager, cognitive_agent, simulation_logger, active_mode
+    api_instance = active_api
     active_mode = mode
     sensor_manager = SensorManager(active_api, idf_path=idf_path)
     actuator_manager = ActuatorManager(active_api, idf_path=idf_path)
@@ -28,21 +28,22 @@ def reset_callback_state(active_api, mode: str = "Baseline", idf_path=None):
 
 def on_zone_timestep(state):
     """EnergyPlus API callback triggered at each zone timestep after heat balance."""
-    global sensor_manager, actuator_manager, cognitive_agent, simulation_logger, active_mode
+    global api_instance, sensor_manager, actuator_manager, cognitive_agent, simulation_logger, active_mode
 
-    if not api.exchange.api_data_fully_ready(state):
+    if api_instance is None or not api_instance.exchange.api_data_fully_ready(state):
         return
 
     # Ignore sizing warmup timesteps
-    if api.exchange.warmup_flag(state):
+    if api_instance.exchange.warmup_flag(state):
         return
 
     # Guarantee instances are initialized
     if sensor_manager is None:
-        reset_callback_state(api, mode=active_mode)
+        reset_callback_state(api_instance, mode=active_mode)
 
     # Read current building telemetry
     bld_state = sensor_manager.read(state)
+
 
     if simulation_logger.run_mode == "AI-Controlled":
         # Closed-loop AI dynamic setpoint optimization

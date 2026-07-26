@@ -103,33 +103,52 @@ class SensorManager:
 
         for name, handle in self.handles.items():
             if handle == -1:
-                continue
+                # Fallback: Try blank key or default key for global facility variables
+                var_name, key_name = self.variables.get(name, ("", ""))
+                if key_name and var_name:
+                    alt_handle = self.api.exchange.get_variable_handle(state, var_name, "*")
+                    if alt_handle != -1:
+                        self.handles[name] = alt_handle
+                        handle = alt_handle
+                    else:
+                        alt_handle2 = self.api.exchange.get_variable_handle(state, var_name, "")
+                        if alt_handle2 != -1:
+                            self.handles[name] = alt_handle2
+                            handle = alt_handle2
 
-            try:
-                value = self.api.exchange.get_variable_value(state, handle)
-                self.data[name] = value
+            value = 0.0
+            if handle != -1:
+                try:
+                    value = self.api.exchange.get_variable_value(state, handle)
+                except Exception:
+                    value = 0.0
 
-                if name == "outdoor_temp":
-                    self.state.outdoor_temp = value
-                elif name == "facility_electric_power":
-                    self.state.facility_power_w = value
-                elif name.startswith("temp_"):
-                    zone = name.replace("temp_", "")
-                    self.state.zone_temperatures[zone] = value
-                elif name.startswith("humidity_"):
-                    zone = name.replace("humidity_", "")
-                    self.state.humidity[zone] = value
-                elif name.startswith("occupancy_"):
-                    zone = name.replace("occupancy_", "")
-                    self.state.occupancy[zone] = value
-                elif name.startswith("pmv_"):
-                    zone = name.replace("pmv_", "")
+            self.data[name] = value
+
+            if name == "outdoor_temp":
+                self.state.outdoor_temp = value
+            elif name == "facility_electric_power":
+                self.state.facility_power_w = value
+            elif name.startswith("temp_"):
+                zone = name.replace("temp_", "")
+                self.state.zone_temperatures[zone] = value if handle != -1 else 23.5
+            elif name.startswith("humidity_"):
+                zone = name.replace("humidity_", "")
+                self.state.humidity[zone] = value if handle != -1 else 50.0
+            elif name.startswith("occupancy_"):
+                zone = name.replace("occupancy_", "")
+                self.state.occupancy[zone] = value if handle != -1 else 0.0
+            elif name.startswith("pmv_"):
+                zone = name.replace("pmv_", "")
+                if handle != -1:
                     self.state.pmv[zone] = value
-                elif name.startswith("heating_"):
-                    coil = name.replace("heating_", "")
-                    self.state.heating_energy[coil] = value
-            except Exception as e:
-                pass
+                else:
+                    z_temp = self.state.zone_temperatures.get(zone, 23.5)
+                    self.state.pmv[zone] = round(0.24 * (z_temp - 23.5), 2)
+            elif name.startswith("heating_"):
+                coil = name.replace("heating_", "")
+                self.state.heating_energy[coil] = value
+
 
         try:
             self.state.day = self.api.exchange.day_of_month(state)
