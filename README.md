@@ -1,5 +1,8 @@
 # EcoLoop Building Agent — Physical AI PoC
 
+🌐 **Live Deployed Web Application:** [https://eco-loop-honeywell-technologies-26.vercel.app/](https://eco-loop-honeywell-technologies-26.vercel.app/)
+
+[![Live App](https://img.shields.io/badge/Vercel-Live--Deployment-10B981.svg?style=for-the-badge&logo=vercel)](https://eco-loop-honeywell-technologies-26.vercel.app/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![EnergyPlus](https://img.shields.io/badge/EnergyPlus-26.1.0-green.svg)](https://energyplus.net/)
 [![PyEnergyPlus C API](https://img.shields.io/badge/PyEnergyPlus-C--API--Bridge-00E5FF.svg)](https://energyplus.net/)
