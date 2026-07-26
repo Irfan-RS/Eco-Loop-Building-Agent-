@@ -27,11 +27,17 @@ from config.settings import (
     resolve_weather_file,
 )
 
-# Ensure EnergyPlus installation path is registered
-sys.path.insert(0, str(ENERGYPLUS_HOME))
+# Ensure EnergyPlus installation path is registered dynamically
+if str(ENERGYPLUS_HOME) not in sys.path:
+    sys.path.insert(0, str(ENERGYPLUS_HOME))
 
-from pyenergyplus.api import EnergyPlusAPI
+try:
+    from pyenergyplus.api import EnergyPlusAPI  # type: ignore # noqa: E402
+except ImportError:
+    EnergyPlusAPI = None  # Fallback for static linters when EnergyPlus DLL is external
+
 from simulator.callbacks import reset_callback_state, on_zone_timestep, simulation_logger, sensor_manager
+
 
 
 def run_single_simulation_process(mode: str = "Baseline", idf_name: str = None, weather_name: str = None) -> dict:
