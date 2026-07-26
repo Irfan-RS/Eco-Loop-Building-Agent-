@@ -259,5 +259,19 @@ if frontend_dist.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import socket
+
+    port = int(os.environ.get("PORT", 8000))
+
+    def is_port_available(p):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('127.0.0.1', p)) != 0
+
+    if not is_port_available(port):
+        print(f"[!] Port {port} is currently in use or TIME_WAIT. Switching to port {port + 1}...")
+        port = port + 1
+
+    print(f"🚀 EcoLoop Server starting at http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
 
