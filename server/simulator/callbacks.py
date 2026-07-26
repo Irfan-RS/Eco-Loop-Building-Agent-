@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-from simulator.api_client import api
 from simulator.sensors import SensorManager
 from simulator.actuators import ActuatorManager
 from simulator.logger import SimulationLogger
