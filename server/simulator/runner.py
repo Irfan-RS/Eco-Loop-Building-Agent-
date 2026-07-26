@@ -356,6 +356,4 @@ if __name__ == "__main__":
     if args.mode == "Comparative":
         run_comparative_simulations(model_name=args.idf, weather_name=args.weather)
     else:
-        run_single_simulation_process(mode=args.mode, idf_name=args.idf, weather_name=args.weather)
-
-        run_single_simulation_process(mode=args.mode, idf_name=args.idf, weather_name=args.weather)
+        run_single_simulation_process(mode=args.mode, idf_name=args.idf, weather_name=args.weather)
