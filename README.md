@@ -136,17 +136,3 @@ git remote add origin https://github.com/Irfan-RS/Eco-Loop-Building-Agent-.git
 ```
 
 ---
-
-## 🌐 1-Click Cloud Deployment Guide
-
-### Option A: Render.com (1-Click Blueprint)
-1. Push repository to GitHub.
-2. Go to [render.com](https://render.com) $\rightarrow$ **New Web Service** $\rightarrow$ Connect GitHub Repo.
-3. Render automatically detects [render.yaml](file:///e:/Projects/EcoLoop-Building-Agent/render.yaml).
-4. Click **Apply**. It deploys a live 24/7 HTTPS URL (e.g., `https://ecoloop-agent.onrender.com`).
-
-### Option B: HuggingFace Spaces (24/7 Free Docker Container)
-1. Go to [huggingface.co/spaces](https://huggingface.co/spaces) $\rightarrow$ **Create New Space**.
-2. Select **Docker** environment.
-3. Upload project repository containing [Dockerfile](file:///e:/Projects/EcoLoop-Building-Agent/Dockerfile).
-4. HuggingFace hosts the app 24/7 on free 2 vCPU / 16 GB RAM hardware.
