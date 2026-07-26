@@ -2,7 +2,7 @@ services:
   - type: web
     name: ecoloop-building-agent
     env: python
-    buildCommand: pip install -r requirements.txt && cd frontend && npm install && npm run build
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt && cd frontend && npm install && npm run build
     startCommand: python server/api_server.py
     envVars:
       - key: PYTHON_VERSION
