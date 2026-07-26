@@ -2,6 +2,12 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any
 
+
+def _safe_key(zone_id: str) -> str:
+    """Normalize any zone ID to a safe lowercase column key (e.g. 'Core_bottom' -> 'core_bottom')."""
+    return zone_id.replace(' ', '_').replace('-', '_').replace('.', '_').lower()
+
+
 class SimulationLogger:
     """
     Logs time-series telemetry data during EnergyPlus simulation runs.
@@ -90,28 +96,38 @@ class SimulationLogger:
             self.last_cooling_sp = cooling_sp
             self.last_heating_sp = heating_sp
 
-        # Commercial Office Occupancy profile (8 AM - 6 PM peak 45 occupants)
+        # Derive zone count for scaling — compute from zones list before active_zones is set
+        _zone_list = self.zones or []
+        _conditioned_count = max(1, len([z for z in _zone_list if 'plenum' not in z.lower() and 'attic' not in z.lower()])) if _zone_list else 5
+        _zone_scale = _conditioned_count / 5.0  # Normalize to 5-zone baseline
+
+        # Occupancy profile: scales with building size (45 people per 5-zone baseline)
+        peak_occ = 45.0 * _zone_scale
         if 8 <= hour <= 17:
-            occ_count = 45.0
+            occ_count = peak_occ
         elif hour in (7, 18):
-            occ_count = 15.0
+            occ_count = peak_occ * 0.33
         else:
             occ_count = 0.0
+
+        # Base plug/equipment load scales with zone count
+        base_plug_kw = 12.5 * _zone_scale
 
         if self.run_mode == "Baseline":
             # Baseline static setpoints (23°C cooling, 20°C heating)
             indoor_temp = 22.8 + max(0.0, outdoor - 22.0) * 0.14
             cooling_delta = max(0.0, outdoor - 23.0)
-            hvac_kw = cooling_delta * 4.3 if (8 <= hour <= 19) else cooling_delta * 1.5
-            plug_kw = 12.5 + (occ_count * 0.12)
+            hvac_kw = cooling_delta * 4.3 * _zone_scale if (8 <= hour <= 19) else cooling_delta * 1.5 * _zone_scale
+            plug_kw = base_plug_kw + (occ_count * 0.12)
             power_kw = plug_kw + hvac_kw
             pmv = (indoor_temp - 23.0) * 0.22
         else:
             # AI-Controlled closed-loop agent setpoint optimization
             indoor_temp = cooling_sp - 0.2 + max(0.0, outdoor - 24.0) * 0.08
             cooling_delta = max(0.0, outdoor - cooling_sp)
-            hvac_kw = cooling_delta * 3.3 if (8 <= hour <= 19) else cooling_delta * 1.1
-            plug_kw = 12.5 + (occ_count * 0.12)
+            hvac_kw = cooling_delta * 3.3 * _zone_scale if (8 <= hour <= 19) else cooling_delta * 1.1 * _zone_scale
+            plug_kw = base_plug_kw + (occ_count * 0.12)
+
             power_kw = (plug_kw + hvac_kw) * 0.95  # VFD & Chiller COP optimization
             pmv = (indoor_temp - 24.0) * 0.18
 
@@ -127,6 +143,11 @@ class SimulationLogger:
             active_zones = list(self.zones)
         else:
             active_zones = ["SPACE1-1", "SPACE2-1", "SPACE3-1", "SPACE4-1", "SPACE5-1", "PLENUM-1"]
+
+        # Filter out plenums from zone count for energy/occupancy scaling
+        conditioned_zones = [z for z in active_zones if 'plenum' not in z.lower() and 'attic' not in z.lower()]
+        num_conditioned = max(1, len(conditioned_zones))
+
 
         record = {
             "day": day,
@@ -148,6 +169,7 @@ class SimulationLogger:
         # Populate exact per-zone telemetry fields dynamically for every discovered zone
         num_zones = max(1, len(active_zones))
         for idx, z_id in enumerate(active_zones):
+            safe_id = _safe_key(z_id)  # normalize: 'Core_bottom' -> 'core_bottom', 'SPACE1-1' -> 'space1_1'
             # Check if sensor state has real value for this zone
             z_temp = state.zone_temperatures.get(z_id) if getattr(state, "zone_temperatures", None) else None
             z_hum = state.humidity.get(z_id) if getattr(state, "humidity", None) else None
@@ -169,17 +191,19 @@ class SimulationLogger:
                 z_pmv_val = 0.85 if is_plenum else (pmv + (0.05 if (idx % 2 == 0) else -0.05))
 
             if z_occ_val is None:
-                z_occ_val = 0.0 if is_plenum else (occ_count / max(1, num_zones - 1))
+                z_occ_val = 0.0 if is_plenum else (occ_count / num_conditioned)
 
             z_pwr = power_kw / num_zones
             z_kwh = self.cumulative_kwh / num_zones
 
-            record[f"temp_{z_id}"] = round(float(z_temp), 2)
-            record[f"humidity_{z_id}"] = round(float(z_hum), 1)
-            record[f"pmv_{z_id}"] = round(float(z_pmv_val), 2)
-            record[f"power_{z_id}"] = round(float(z_pwr), 2)
-            record[f"kwh_{z_id}"] = round(float(z_kwh), 2)
-            record[f"occ_{z_id}"] = int(round(float(z_occ_val)))
+            # Write using safe lowercase key so cloud-fallback and logger use identical column names
+            record[f"temp_{safe_id}"] = round(float(z_temp), 2)
+            record[f"humidity_{safe_id}"] = round(float(z_hum), 1)
+            record[f"pmv_{safe_id}"] = round(float(z_pmv_val), 2)
+            record[f"power_{safe_id}"] = round(float(z_pwr), 2)
+            record[f"kwh_{safe_id}"] = round(float(z_kwh), 2)
+            record[f"occ_{safe_id}"] = int(round(float(z_occ_val)))
+
 
         self.records.append(record)
 
