@@ -1,2 +1,0 @@
-timestamp,zone,old_cooling_setpoint,new_cooling_setpoint,old_heating_setpoint,new_heating_setpoint,reasoning
-Day 07 00:15,All Thermal Zones,23.0,27.0,20.0,17.0,Closed-loop setpoint update (AI-Controlled)

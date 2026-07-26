@@ -23,7 +23,8 @@ def reset_callback_state(active_api, mode: str = "Baseline", idf_path=None):
     sensor_manager = SensorManager(active_api, idf_path=idf_path)
     actuator_manager = ActuatorManager(active_api, idf_path=idf_path)
     cognitive_agent = CognitiveAgent(actuator_manager=actuator_manager)
-    simulation_logger = SimulationLogger(run_mode=mode)
+    simulation_logger = SimulationLogger(run_mode=mode, zones=sensor_manager.zones)
+
 
 
 def on_zone_timestep(state):

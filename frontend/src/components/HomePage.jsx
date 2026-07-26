@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Play, ShieldCheck, Zap, Thermometer, Layers, Building2, CloudSun, Timer, ArrowRight, RefreshCw, Sparkles, SlidersHorizontal, BrainCircuit, Activity } from 'lucide-react';
+import { Cpu, Play, ShieldCheck, Zap, Thermometer, Layers, Building2, CloudSun, Timer, ArrowRight, Sparkles, SlidersHorizontal, BrainCircuit, Activity } from 'lucide-react';
 
-export default function HomePage({ onCalculate, isSimulating }) {
-  const [selectedModel, setSelectedModel] = useState('5ZoneAirCooled.idf');
-  const [selectedWeather, setSelectedWeather] = useState('Chicago_OHare_TMY3.epw');
+export default function HomePage({ onCalculate, isSimulating, availableModels = [], availableWeather = [] }) {
+  const modelsList = availableModels.length > 0 ? availableModels : ['5ZoneAirCooled.idf', 'ASHRAE901_OfficeMedium_STD2019_Denver.idf', 'Supermarket_Detailed.idf'];
+  const weatherList = availableWeather.length > 0 ? availableWeather : ['USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw', 'USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw', 'USA_VA_Sterling-Washington.Dulles.Intl.AP.724030_TMY3.epw'];
+
+  const [selectedModel, setSelectedModel] = useState(modelsList[0]);
+  const [selectedWeather, setSelectedWeather] = useState(weatherList[0]);
   const [selectedPeriod, setSelectedPeriod] = useState('5days');
 
   useEffect(() => {
-    setSelectedModel('5ZoneAirCooled.idf');
-    setSelectedWeather('Chicago_OHare_TMY3.epw');
-    setSelectedPeriod('5days');
-  }, []);
+    if (modelsList.length > 0 && !modelsList.includes(selectedModel)) {
+      setSelectedModel(modelsList[0]);
+    }
+    if (weatherList.length > 0 && !weatherList.includes(selectedWeather)) {
+      setSelectedWeather(weatherList[0]);
+    }
+  }, [availableModels, availableWeather]);
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0 60px 0' }}>
@@ -141,13 +147,14 @@ export default function HomePage({ onCalculate, isSimulating }) {
                 transition: 'all 0.2s ease'
               }}
             >
-              <option value="5ZoneAirCooled.idf" style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>🏢 5ZoneAirCooled.idf (Recommended - 5 Zones VAV)</option>
-              <option value="ASHRAE901_OfficeMedium.idf" style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>🏬 ASHRAE901_OfficeMedium.idf (Standard - 3-Story Multizone)</option>
+              {modelsList.map(m => (
+                <option key={m} value={m} style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>
+                  🏢 {m}
+                </option>
+              ))}
             </select>
             <p style={{ fontSize: '0.85rem', color: '#CBD5E1', marginTop: '10px', lineHeight: 1.4, fontWeight: 500 }}>
-              {selectedModel === '5ZoneAirCooled.idf' 
-                ? 'Commercial Office Building · 5 Thermal Zones · Packaged VAV Air System' 
-                : 'Medium Commercial Office · 3-Story Multizone Layout'}
+              Building Model File: <strong style={{ color: '#34D399' }}>{selectedModel}</strong>
             </p>
           </div>
 
@@ -181,15 +188,17 @@ export default function HomePage({ onCalculate, isSimulating }) {
                 transition: 'all 0.2s ease'
               }}
             >
-              <option value="Chicago_OHare_TMY3.epw" style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>📍 Chicago, IL, USA — O'Hare Intl (Zone 5A Hot/Cold Swings)</option>
-              <option value="San_Francisco_TMY3.epw" style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>📍 San Francisco, CA, USA — Coastal (Zone 3C Mild Mediterranean)</option>
+              {weatherList.map(w => (
+                <option key={w} value={w} style={{ background: '#0F172A', color: '#F8FAFC', padding: '12px' }}>
+                  📍 {w}
+                </option>
+              ))}
             </select>
             <p style={{ fontSize: '0.85rem', color: '#CBD5E1', marginTop: '10px', lineHeight: 1.4, fontWeight: 500 }}>
-              {selectedWeather === 'Chicago_OHare_TMY3.epw'
-                ? 'Summer Hot Spell (July 7–12) · Dynamic temperature swings (18°C to 34°C)'
-                : 'Moderate Coastal Weather · Consistent mild temperatures'}
+              Weather EPW Profile: <strong style={{ color: '#22D3EE' }}>{selectedWeather}</strong>
             </p>
           </div>
+
 
           {/* Dropdown 3: Run Period */}
           <div>
@@ -256,7 +265,10 @@ export default function HomePage({ onCalculate, isSimulating }) {
           >
             {isSimulating ? (
               <>
-                <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                <div className="kpi-icon-ring" style={{ '--ring-color': '#fff', width: 22, height: 22, flexShrink: 0 }}>
+                  <div className="ring-outer" style={{ borderWidth: 2 }} />
+                  <div className="ring-inner" style={{ inset: 4, borderWidth: 1.5, opacity: 0.5 }} />
+                </div>
                 <span>Running EnergyPlus Simulation...</span>
               </>
             ) : (

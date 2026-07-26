@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,7 +11,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { Zap, Thermometer, Eye, Sparkles, CheckCircle2, Sliders } from 'lucide-react';
+import { Zap, Thermometer, Eye, Sparkles, CheckCircle2, Sliders, Calendar } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -25,22 +25,56 @@ ChartJS.register(
 );
 
 export default function MetricsCharts({ baselineData, aiData }) {
-  // Default showAI = true so real AI performance metrics render immediately on calculation
   const [showAI, setShowAI] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
+  const [selectedDayFilter, setSelectedDayFilter] = useState('all'); // 'all' or day number
 
   if (!baselineData || !aiData || baselineData.length === 0) return null;
 
   // Match timeline length exactly
   const minLength = Math.min(baselineData.length, aiData.length);
-  const matchedBaseline = baselineData.slice(0, minLength);
-  const matchedAI = aiData.slice(0, minLength);
-  const labels = matchedAI.map(d => d.time_str || `Day ${d.day} ${d.hour}:00`);
+  const rawBaseline = baselineData.slice(0, minLength);
+  const rawAI = aiData.slice(0, minLength);
+
+  // Extract unique days dynamically
+  const uniqueDays = useMemo(() => {
+    const set = new Set();
+    rawAI.forEach(d => {
+      if (d.day !== undefined && d.day !== null) set.add(d.day);
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [rawAI]);
+
+  // Filter datasets based on selectedDayFilter
+  const matchedBaseline = useMemo(() => {
+    if (selectedDayFilter === 'all') return rawBaseline;
+    return rawBaseline.filter(d => d.day === selectedDayFilter);
+  }, [rawBaseline, selectedDayFilter]);
+
+  const matchedAI = useMemo(() => {
+    if (selectedDayFilter === 'all') return rawAI;
+    return rawAI.filter(d => d.day === selectedDayFilter);
+  }, [rawAI, selectedDayFilter]);
+
+  // Generate neat, uncluttered X-axis labels
+  const labels = useMemo(() => {
+    return matchedAI.map((d, i) => {
+      if (selectedDayFilter !== 'all') {
+        // Hourly / 15-min label for single day view
+        const h = d.hour !== undefined ? String(d.hour).padStart(2, '0') : '00';
+        const m = d.minute !== undefined ? String(d.minute).padStart(2, '0') : '00';
+        return `${h}:${m}`;
+      }
+      // Neat Day label for multi-day view
+      if (d.time_str && !d.time_str.includes('Day')) return d.time_str;
+      return d.day ? `Day ${d.day}` : `Step ${i + 1}`;
+    });
+  }, [matchedAI, selectedDayFilter]);
 
   // Calculate comparative impact numbers
   const baseKwh = matchedBaseline[matchedBaseline.length - 1]?.cumulative_kwh || 0;
   const aiKwh = matchedAI[matchedAI.length - 1]?.cumulative_kwh || 0;
-  const kwhSaved = baseKwh - aiKwh;
+  const kwhSaved = Math.max(0, baseKwh - aiKwh);
   const pctSaved = baseKwh > 0 ? ((kwhSaved / baseKwh) * 100).toFixed(1) : '0';
 
   const violatedCount = matchedAI.filter(d => d.comfort_violated || Math.abs(d.avg_pmv || 0) > 0.5).length;
@@ -55,7 +89,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       borderDash: [4, 4],
       borderWidth: 2,
       pointRadius: 0,
-      tension: 0.2,
+      tension: 0.35,
     },
   ];
 
@@ -68,7 +102,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       fill: true,
       borderWidth: 2.5,
       pointRadius: 0,
-      tension: 0.2,
+      tension: 0.35,
     });
   }
 
@@ -83,6 +117,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       borderDash: [4, 4],
       borderWidth: 2,
       pointRadius: 0,
+      tension: 0.2,
     },
   ];
 
@@ -95,6 +130,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       fill: true,
       borderWidth: 2.5,
       pointRadius: 0,
+      tension: 0.2,
     });
   }
 
@@ -108,6 +144,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       borderColor: '#FFEB3B',
       borderWidth: 2.5,
       pointRadius: 0,
+      tension: 0.35,
     },
     {
       label: 'Outdoor Weather Temp (°C)',
@@ -115,6 +152,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
       borderColor: 'rgba(255, 255, 255, 0.35)',
       borderWidth: 1.5,
       pointRadius: 0,
+      tension: 0.35,
     },
   ];
 
@@ -153,6 +191,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
         fill: true,
         borderWidth: 2.5,
         pointRadius: 0,
+        tension: 0.35,
       },
       {
         label: 'PMV Upper Limit (+0.5)',
@@ -183,7 +222,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
           color: '#F1F5F9',
           font: { family: 'Outfit', size: 12, weight: '600' },
           usePointStyle: true,
-          padding: 16,
+          padding: 14,
         },
       },
       tooltip: {
@@ -199,7 +238,12 @@ export default function MetricsCharts({ baselineData, aiData }) {
     },
     scales: {
       x: {
-        ticks: { color: '#94A3B8', font: { family: 'Outfit', size: 11 } },
+        ticks: {
+          color: '#94A3B8',
+          font: { family: 'Outfit', size: 11, weight: '600' },
+          maxTicksLimit: selectedDayFilter === 'all' ? (uniqueDays.length || 7) * 2 : 12,
+          maxRotation: 0,
+        },
         grid: { color: 'rgba(255,255,255,0.04)' },
       },
       y: {
@@ -231,8 +275,8 @@ export default function MetricsCharts({ baselineData, aiData }) {
               </div>
               <p style={{ fontSize: '0.86rem', color: '#94A3B8', marginTop: '2px' }}>
                 {showAI 
-                  ? 'Showing comparison overlay between Unoptimized Baseline and AI Closed-Loop Agent across all timeline days.'
-                  : 'Currently showing Standard Unoptimized Baseline schedule (Without AI). Click toggle to reveal AI optimization performance impact!'}
+                  ? `Showing comparison overlay across ${uniqueDays.length || 5} simulation days.`
+                  : 'Currently showing Standard Unoptimized Baseline schedule (Without AI).'}
               </p>
             </div>
           </div>
@@ -257,7 +301,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
             }}
           >
             <Sparkles size={20} />
-            <span>{showAI ? 'Disable AI Overlay (Show Without AI Only)' : '✨ Enable AI Comparison Overlay'}</span>
+            <span>{showAI ? 'Disable AI Overlay' : '✨ Enable AI Comparison Overlay'}</span>
           </button>
 
         </div>
@@ -284,7 +328,7 @@ export default function MetricsCharts({ baselineData, aiData }) {
               </span>
             </div>
             <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', fontSize: '0.9rem', fontWeight: 600 }}>
-              <span style={{ color: '#00E676' }}>⚡ Total Energy Saved: <strong>{kwhSaved.toLocaleString()} kWh ({pctSaved}% Savings)</strong></span>
+              <span style={{ color: '#00E676' }}>⚡ Energy Saved: <strong>{kwhSaved.toLocaleString()} kWh ({pctSaved}% Savings)</strong></span>
               <span style={{ color: '#00E5FF' }}>🌱 CO2 Avoided: <strong>{(kwhSaved * 0.42).toFixed(1)} kg CO2e</strong></span>
               <span style={{ color: '#E040FB' }}>🛋️ Comfort Compliance: <strong>{comfortCompliancePct}% ASHRAE 55</strong></span>
             </div>
@@ -292,12 +336,70 @@ export default function MetricsCharts({ baselineData, aiData }) {
         )}
       </div>
 
+      {/* NEAT DAY SELECTOR TABS BAR (All Days / Day 1 / Day 2 / Day 3 / Day 4 / Day 5 / Day 6 / Day 7) */}
+      <div style={{
+        background: 'rgba(15, 23, 42, 0.8)',
+        borderRadius: '14px',
+        padding: '12px 18px',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        marginBottom: '20px',
+        display: 'flex',
+        justify: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 800, color: '#F8FAFC' }}>
+          <Calendar size={18} color="#10B981" />
+          <span>Timeline Day Filter:</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setSelectedDayFilter('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: selectedDayFilter === 'all' ? '#10B981' : 'rgba(255, 255, 255, 0.06)',
+              color: selectedDayFilter === 'all' ? '#0F172A' : '#CBD5E1',
+              fontWeight: 800,
+              fontSize: '0.84rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            📅 All {uniqueDays.length || 5} Days ({matchedAI.length} Steps)
+          </button>
+
+          {uniqueDays.map(dNum => (
+            <button
+              key={dNum}
+              onClick={() => setSelectedDayFilter(dNum)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                background: selectedDayFilter === dNum ? '#06B6D4' : 'rgba(255, 255, 255, 0.06)',
+                color: selectedDayFilter === dNum ? '#0F172A' : '#CBD5E1',
+                fontWeight: 800,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Day {dNum}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* View Switcher Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Eye size={20} color="#00E676" />
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F1F5F9' }}>
-            Chart Analytics (Matched Timeline: {matchedBaseline.length} Control Timesteps)
+            Chart Analytics ({selectedDayFilter === 'all' ? `All ${uniqueDays.length || 5} Days` : `Day ${selectedDayFilter} View`} — {matchedBaseline.length} Control Timesteps)
           </h3>
         </div>
 

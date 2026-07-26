@@ -12,8 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ENERGYPLUS_DIR = BASE_DIR / "energyplus"
 
 IDF_DIR = ENERGYPLUS_DIR / "idf"
+MODIFIED_IDF_DIR = ENERGYPLUS_DIR / "modified_idf"
 WEATHER_DIR = ENERGYPLUS_DIR / "weather"
 OUTPUT_DIR = ENERGYPLUS_DIR / "output"
+
+IDF_DIR.mkdir(parents=True, exist_ok=True)
+MODIFIED_IDF_DIR.mkdir(parents=True, exist_ok=True)
+WEATHER_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==========================================================
 # Input Files (5ZoneAirCooled.idf + Chicago TMY3 EPW Weather)
@@ -21,6 +27,7 @@ OUTPUT_DIR = ENERGYPLUS_DIR / "output"
 # ==========================================================
 IDF_FILE = IDF_DIR / "5ZoneAirCooled.idf"
 WEATHER_FILE = WEATHER_DIR / "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
+
 
 
 def resolve_idf_file(name=None) -> Path:

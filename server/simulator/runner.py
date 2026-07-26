@@ -156,16 +156,18 @@ def run_comparative_simulations(model_name: str = None, weather_name: str = None
     # 1. Run Baseline Subprocess
     print("[*] Launching Baseline Simulation Process...")
     cmd_base = [python_exe, "-m", "simulator.runner", "--mode", "Baseline"] + extra_args
-    subprocess.run(cmd_base, check=True)
+    subprocess.run(cmd_base, check=True, cwd=str(BASE_DIR))
 
     # 2. Run AI-Controlled Subprocess
     print("[*] Launching AI-Controlled Simulation Process...")
     cmd_ai = [python_exe, "-m", "simulator.runner", "--mode", "AI-Controlled"] + extra_args
-    subprocess.run(cmd_ai, check=True)
+    subprocess.run(cmd_ai, check=True, cwd=str(BASE_DIR))
+
 
     # 3. Read generated CSVs and calculate comparative KPIs
     outputs_folder = BASE_DIR / "outputs"
     import pandas as pd
+    import json
 
     df_base = pd.read_csv(outputs_folder / "baseline_metrics.csv")
     df_ai = pd.read_csv(outputs_folder / "aicontrolled_metrics.csv")
@@ -196,8 +198,37 @@ def run_comparative_simulations(model_name: str = None, weather_name: str = None
         "ai_comfort_compliance_pct": round(compliance_rate, 1),
     }
 
+    # 4. Archive into a unique timestamped experiment folder
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_slug = (model_name or "5ZoneAirCooled.idf").replace(".idf", "")
+    run_dir_name = f"run_{ts}_{model_slug}"
+    unique_run_dir = outputs_folder / run_dir_name
+    unique_run_dir.mkdir(parents=True, exist_ok=True)
+
+    for f_name in ["baseline_metrics.csv", "aicontrolled_metrics.csv", "setpoint_change_log.csv", "setpoint_change_log.json"]:
+        src_file = outputs_folder / f_name
+        if src_file.exists():
+            try:
+                shutil.copy(src_file, unique_run_dir / f_name)
+            except Exception:
+                pass
+
+    # 5. Write metadata JSON for strict active_config matching
+    run_meta = {
+        "run_id": run_dir_name,
+        "model": model_name or "5ZoneAirCooled.idf",
+        "weather": weather_name or "Chicago_OHare_TMY3.epw",
+        "period": period or "5days",
+        "created_at": datetime.now().isoformat(),
+        "summary": comparison,
+    }
+    with open(outputs_folder / "latest_run_meta.json", "w", encoding="utf-8") as f:
+        json.dump(run_meta, f, indent=2)
+    with open(unique_run_dir / "run_meta.json", "w", encoding="utf-8") as f:
+        json.dump(run_meta, f, indent=2)
+
     print("\n" + "=" * 65)
-    print("[RESULT] QUANTITATIVE ENERGY SAVINGS COMPARISON")
+    print(f"[RESULT] QUANTITATIVE ENERGY SAVINGS COMPARISON ({run_dir_name})")
     print("=" * 65)
     print(f"  Baseline Energy Consumption    : {base_kwh:,.2f} kWh")
     print(f"  AI-Controlled Consumption      : {ai_kwh:,.2f} kWh")
@@ -205,9 +236,11 @@ def run_comparative_simulations(model_name: str = None, weather_name: str = None
     print(f"  [-] Peak Demand Reduction       : {peak_reduced_kw:,.2f} kW ({peak_pct_reduced:.1f}% Peak Cut)")
     print(f"  [*] CO2 Emissions Saved         : {co2_saved:,.2f} kg CO2e")
     print(f"  [*] AI Comfort Compliance Rate  : {compliance_rate:.1f}%")
+    print(f"  [*] Archived Unique Run Folder : {unique_run_dir}")
     print("=" * 65 + "\n")
 
     return comparison
+
 
 
 if __name__ == "__main__":

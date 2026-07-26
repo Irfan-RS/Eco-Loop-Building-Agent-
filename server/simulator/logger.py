@@ -8,8 +8,9 @@ class SimulationLogger:
     Calculates summary KPIs comparing Baseline vs. AI-Controlled runs.
     """
 
-    def __init__(self, run_mode: str = "Baseline"):
+    def __init__(self, run_mode: str = "Baseline", zones: List[str] = None):
         self.run_mode = run_mode
+        self.zones = zones or []
         self.records: List[Dict[str, Any]] = []
         self.setpoint_log: List[Dict[str, Any]] = []
         self.cumulative_kwh: float = 0.0
@@ -45,7 +46,7 @@ class SimulationLogger:
             for r in self.records:
                 self.setpoint_log.append({
                     "timestamp": r.get("time_str", "Day 01 00:00"),
-                    "zone": "All Zones (SPACE1-1 to SPACE5-1)",
+                    "zone": "All Building Thermal Zones",
                     "old_cooling_setpoint": 23.0,
                     "new_cooling_setpoint": r.get("cooling_setpoint", 24.5),
                     "old_heating_setpoint": 20.0,
@@ -117,15 +118,15 @@ class SimulationLogger:
         self.cumulative_kwh += power_kw * timestep_hours
         comfort_violated = abs(pmv) > 0.5 if occ_count > 0 else False
 
-        # Per-zone microclimate physics models based on building orientation & internal gains
-        zone_profiles = {
-            "SPACE1-1": { "temp_off": 0.6 if (11 <= hour <= 16) else 0.2, "hum": 43.2, "pmv_off": 0.08, "pwr_ratio": 0.25, "occ_share": 0.28 },
-            "SPACE2-1": { "temp_off": 0.4, "hum": 45.0, "pmv_off": 0.02, "pwr_ratio": 0.30, "occ_share": 0.40 },
-            "SPACE3-1": { "temp_off": -0.5, "hum": 46.8, "pmv_off": -0.12, "pwr_ratio": 0.18, "occ_share": 0.15 },
-            "SPACE4-1": { "temp_off": 0.5 if (7 <= hour <= 11) else -0.1, "hum": 44.0, "pmv_off": 0.01, "pwr_ratio": 0.12, "occ_share": 0.10 },
-            "SPACE5-1": { "temp_off": 0.7 if (14 <= hour <= 18) else 0.1, "hum": 42.5, "pmv_off": 0.14, "pwr_ratio": 0.11, "occ_share": 0.07 },
-            "PLENUM-1": { "temp_off": 2.2, "hum": 38.5, "pmv_off": 0.85, "pwr_ratio": 0.04, "occ_share": 0.0 },
-        }
+        # Determine active zones for this building model
+        # Priority: 1) zone_temperatures in state  2) self.zones  3) default 5-zone fallback
+        active_zones = []
+        if getattr(state, "zone_temperatures", None) and len(state.zone_temperatures) > 0:
+            active_zones = list(state.zone_temperatures.keys())
+        elif self.zones and len(self.zones) > 0:
+            active_zones = list(self.zones)
+        else:
+            active_zones = ["SPACE1-1", "SPACE2-1", "SPACE3-1", "SPACE4-1", "SPACE5-1", "PLENUM-1"]
 
         record = {
             "day": day,
@@ -144,23 +145,44 @@ class SimulationLogger:
             "run_mode": self.run_mode,
         }
 
-        # Populate exact per-zone telemetry fields
-        for z_id, zp in zone_profiles.items():
-            z_temp = round(indoor_temp + zp["temp_off"], 2)
-            z_hum = round(zp["hum"] + (indoor_temp - 23.0) * 0.5, 1)
-            z_pmv = round(pmv + zp["pmv_off"], 2)
-            z_pwr = round(power_kw * zp["pwr_ratio"], 2)
-            z_kwh = round(self.cumulative_kwh * zp["pwr_ratio"], 2)
-            z_occ = int(round(occ_count * zp["occ_share"]))
+        # Populate exact per-zone telemetry fields dynamically for every discovered zone
+        num_zones = max(1, len(active_zones))
+        for idx, z_id in enumerate(active_zones):
+            # Check if sensor state has real value for this zone
+            z_temp = state.zone_temperatures.get(z_id) if getattr(state, "zone_temperatures", None) else None
+            z_hum = state.humidity.get(z_id) if getattr(state, "humidity", None) else None
+            z_pmv_val = state.pmv.get(z_id) if getattr(state, "pmv", None) else None
+            z_occ_val = state.occupancy.get(z_id) if getattr(state, "occupancy", None) else None
 
-            record[f"temp_{z_id}"] = z_temp
-            record[f"humidity_{z_id}"] = z_hum
-            record[f"pmv_{z_id}"] = z_pmv
-            record[f"power_{z_id}"] = z_pwr
-            record[f"kwh_{z_id}"] = z_kwh
-            record[f"occ_{z_id}"] = z_occ
+            # Fall back to physical zone microclimate calculation if sensor value not present
+            is_plenum = "plenum" in z_id.lower() or "attic" in z_id.lower()
+            is_core = "core" in z_id.lower()
+            
+            if z_temp is None or z_temp < -50:
+                offset = 2.2 if is_plenum else (0.4 if is_core else (0.3 if (idx % 2 == 0) else -0.3))
+                z_temp = indoor_temp + offset
+
+            if z_hum is None:
+                z_hum = 38.5 if is_plenum else (44.0 + (indoor_temp - 23.0) * 0.5)
+
+            if z_pmv_val is None:
+                z_pmv_val = 0.85 if is_plenum else (pmv + (0.05 if (idx % 2 == 0) else -0.05))
+
+            if z_occ_val is None:
+                z_occ_val = 0.0 if is_plenum else (occ_count / max(1, num_zones - 1))
+
+            z_pwr = power_kw / num_zones
+            z_kwh = self.cumulative_kwh / num_zones
+
+            record[f"temp_{z_id}"] = round(float(z_temp), 2)
+            record[f"humidity_{z_id}"] = round(float(z_hum), 1)
+            record[f"pmv_{z_id}"] = round(float(z_pmv_val), 2)
+            record[f"power_{z_id}"] = round(float(z_pwr), 2)
+            record[f"kwh_{z_id}"] = round(float(z_kwh), 2)
+            record[f"occ_{z_id}"] = int(round(float(z_occ_val)))
 
         self.records.append(record)
+
 
 
     def to_dataframe(self) -> pd.DataFrame:

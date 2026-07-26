@@ -8,7 +8,7 @@ import TelemetryTable from './components/TelemetryTable';
 import ModelInspector from './components/ModelInspector';
 import ZoneAnalytics from './components/ZoneAnalytics';
 import ZoneMap from './components/ZoneMap';
-import { ArrowLeft, RefreshCw, Cpu, Activity, Zap, Timer, Building2, CloudSun, Layers, Sliders, Play, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Cpu, Activity, Zap, Timer, Building2, CloudSun, Layers, Sliders, Play, CheckCircle2 } from 'lucide-react';
 
 
 export default function App() {
@@ -16,13 +16,19 @@ export default function App() {
     return sessionStorage.getItem('ecoloop_current_page') || 'home';
   });
 
-  const [analyticsTab, setAnalyticsTab] = useState('zone-analytics'); // 'zone-analytics' | 'overview' | 'charts' | 'zones' | 'logs' | 'inspector' | 'all'
+  const [analyticsTab, setAnalyticsTab] = useState('zone-analytics');
   const [metrics, setMetrics] = useState(null);
   const [modelInfo, setModelInfo] = useState(null);
+  const [availableModels, setAvailableModels] = useState(['5ZoneAirCooled.idf', 'ASHRAE901_OfficeMedium.idf']);
+  const [availableWeather, setAvailableWeather] = useState(['Chicago_OHare_TMY3.epw', 'San_Francisco_TMY3.epw']);
   const [loading, setLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [liveLogs, setLiveLogs] = useState([]);       // Real EnergyPlus stdout lines
+  const [simResults, setSimResults] = useState(null); // Final savings summary from simulation
+
+
 
   const backendSteps = [
     "🚀 Initializing PyEnergyPlus C API & State Manager...",
@@ -53,7 +59,10 @@ export default function App() {
     };
   });
 
-  const API_BASE = 'http://localhost:8000';
+  const API_BASE = typeof window !== 'undefined' && window.location.origin.includes(':5173')
+    ? 'http://localhost:8000'
+    : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+
 
   useEffect(() => {
     let timer;
@@ -77,13 +86,15 @@ export default function App() {
     sessionStorage.setItem('ecoloop_active_config', JSON.stringify(activeConfig));
   }, [activeConfig]);
 
-  const fetchData = async () => {
+  const fetchData = async (showSpinner = false) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const cacheBuster = Date.now();
+      const modelParam = encodeURIComponent(activeConfig.model);
+      const weatherParam = encodeURIComponent(activeConfig.weather);
       const [resMetrics, resModel] = await Promise.all([
-        fetch(`${API_BASE}/api/metrics?t=${cacheBuster}`).then(r => r.json()),
-        fetch(`${API_BASE}/api/building-model?t=${cacheBuster}`).then(r => r.json()),
+        fetch(`${API_BASE}/api/metrics?model=${modelParam}&weather=${weatherParam}&t=${cacheBuster}`).then(r => r.json()),
+        fetch(`${API_BASE}/api/building-model?model=${modelParam}&t=${cacheBuster}`).then(r => r.json()),
       ]);
 
       if (resMetrics.status === 'success') {
@@ -91,57 +102,135 @@ export default function App() {
         if (resMetrics.active_config) {
           setActiveConfig(resMetrics.active_config);
         }
+      } else {
+        // No data yet — don't show stale/dummy, keep metrics null
+        setMetrics(null);
       }
       if (resModel.status === 'success') setModelInfo(resModel);
     } catch (err) {
       console.error('API Error:', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    // On initial load: fetch silently (no spinner), just populate if data exists
+    setLoading(false);
+    fetchData(false);
+
+    // Fetch all available IDF building models and EPW weather profiles in energyplus/
+    fetch(`${API_BASE}/api/available-files?t=${Date.now()}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'success') {
+          if (data.models && data.models.length > 0) setAvailableModels(data.models);
+          if (data.weather_files && data.weather_files.length > 0) setAvailableWeather(data.weather_files);
+        }
+      })
+      .catch(() => {});
   }, []);
 
+  // Re-fetch building model info whenever the selected IDF changes
+  // (shows correct zones/people counts without running a full simulation)
+  useEffect(() => {
+    if (!activeConfig.model) return;
+    fetch(`${API_BASE}/api/building-model?model=${encodeURIComponent(activeConfig.model)}&t=${Date.now()}`)
+      .then(r => r.json())
+      .then(data => { if (data.status === 'success') setModelInfo(data); })
+      .catch(() => {});
+  }, [activeConfig.model]);
+
+
+
+
   const handleRunSimulation = async (config = {}) => {
+    const newConfig = { ...activeConfig, ...config };
+    setActiveConfig(newConfig);
+    setCurrentPage('analytics');
+    setIsSimulating(true);
+    setLoading(true);
+    setMetrics(null);
+    setSimResults(null);
+    setLiveLogs([]);
+
+    // Fetch building model info for the new model if not already loaded
+    fetch(`${API_BASE}/api/building-model?model=${encodeURIComponent(newConfig.model)}&t=${Date.now()}`)
+      .then(r => r.json())
+      .then(data => { if (data.status === 'success') setModelInfo(data); })
+      .catch(() => {});
+
+
+    // 1. Fire POST to kick off background simulation thread (returns instantly)
     try {
-      setIsSimulating(true);
-      setLoading(true);
-      setMetrics(null);    // 1. Instantly clear old metrics
-      setModelInfo(null);  // 2. Instantly clear old model info
-
-      const newConfig = { ...activeConfig, ...config };
-      setActiveConfig(newConfig);
-      setCurrentPage('analytics'); // Direct user to analytics view
-
       const res = await fetch(`${API_BASE}/api/run-simulation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newConfig)
       });
       const data = await res.json();
-      if (data.status === 'success' && data.active_config) {
-        setActiveConfig(data.active_config);
-      }
+      if (data.active_config) setActiveConfig(data.active_config);
     } catch (err) {
-      console.error('Simulation trigger error:', err);
-    } finally {
+      console.error('Failed to start simulation:', err);
       setIsSimulating(false);
-      await fetchData(); // 3. Directly render newly calculated metrics!
+      setLoading(false);
+      return;
     }
+
+    // 2. Open SSE connection to stream real EnergyPlus subprocess output
+    const sse = new EventSource(`${API_BASE}/api/simulation-logs`);
+    sse.onmessage = (event) => {
+      const line = event.data;
+
+      // Parse final results JSON broadcast
+      if (line.startsWith('[RESULTS] ')) {
+        try {
+          const results = JSON.parse(line.replace('[RESULTS] ', ''));
+          setSimResults(results);
+        } catch (_) {}
+        return;
+      }
+
+      // Stop when done
+      if (line === '[DONE]' || line.startsWith('[ERROR]')) {
+        sse.close();
+        return;
+      }
+
+      // Skip internal phase/cmd markers from display
+      if (line.startsWith('[PHASE]') || line.startsWith('[CMD]')) return;
+
+      // Append real log line (keep last 120 lines)
+      setLiveLogs(prev => {
+        const next = [...prev, line];
+        return next.length > 120 ? next.slice(next.length - 120) : next;
+      });
+    };
+    sse.onerror = () => { sse.close(); };
+
+    // 3. Poll /api/simulation-status until simulation finishes
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`${API_BASE}/api/simulation-status`);
+        const statusData = await statusRes.json();
+        if (!statusData.running && statusData.phase !== 'idle') {
+          clearInterval(pollInterval);
+          sse.close();
+          setIsSimulating(false);
+          setLoading(false);
+          // 4. Fetch the newly written CSV metrics to populate charts/analytics
+          await fetchData(false);
+        }
+      } catch (_) {}
+    }, 2000);
   };
+
 
 
   const navigateToHome = () => {
     setIsSimulating(false);
     setCurrentPage('home');
-    setActiveConfig({
-      model: '5ZoneAirCooled.idf',
-      weather: 'Chicago_OHare_TMY3.epw',
-      period: '5days'
-    });
-    setMetrics(null);
+    // Do NOT clear metrics or activeConfig — preserve results for when user returns
     sessionStorage.setItem('ecoloop_current_page', 'home');
   };
 
@@ -175,6 +264,8 @@ export default function App() {
           <HomePage 
             onCalculate={handleRunSimulation} 
             isSimulating={isSimulating} 
+            availableModels={availableModels}
+            availableWeather={availableWeather}
           />
         ) : (
           <div style={{ display: 'flex', gap: '20px', marginTop: '16px', alignItems: 'flex-start' }}>
@@ -230,7 +321,11 @@ export default function App() {
                   </div>
                   <select
                     value={activeConfig.model}
-                    onChange={(e) => handleRunSimulation({ ...activeConfig, model: e.target.value })}
+                    onChange={(e) => {
+                      setActiveConfig(prev => ({ ...prev, model: e.target.value }));
+                      setMetrics(null);     // Clear old CSV data — zones will update from modelInfo
+                      setSimResults(null);  // Clear old results banner
+                    }}
                     disabled={loading || isSimulating}
                     style={{
                       width: '100%',
@@ -245,8 +340,11 @@ export default function App() {
                       outline: 'none'
                     }}
                   >
-                    <option value="5ZoneAirCooled.idf" style={{ background: '#0F172A', color: '#F8FAFC' }}>🏢 5ZoneAirCooled.idf</option>
-                    <option value="ASHRAE901_OfficeMedium.idf" style={{ background: '#0F172A', color: '#F8FAFC' }}>🏬 ASHRAE901_OfficeMedium.idf</option>
+                    {availableModels.map(m => (
+                      <option key={m} value={m} style={{ background: '#0F172A', color: '#F8FAFC' }}>
+                        🏢 {m}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -257,7 +355,11 @@ export default function App() {
                   </div>
                   <select
                     value={activeConfig.weather}
-                    onChange={(e) => handleRunSimulation({ ...activeConfig, weather: e.target.value })}
+                    onChange={(e) => {
+                      setActiveConfig(prev => ({ ...prev, weather: e.target.value }));
+                      setMetrics(null);     // Clear old CSV data — new weather needs new simulation
+                      setSimResults(null);  // Clear old results banner
+                    }}
                     disabled={loading || isSimulating}
                     style={{
                       width: '100%',
@@ -272,10 +374,32 @@ export default function App() {
                       outline: 'none'
                     }}
                   >
-                    <option value="Chicago_OHare_TMY3.epw" style={{ background: '#0F172A', color: '#F8FAFC' }}>📍 Chicago O'Hare (Cold/Hot)</option>
-                    <option value="San_Francisco_TMY3.epw" style={{ background: '#0F172A', color: '#F8FAFC' }}>📍 San Francisco (Coastal)</option>
+                    {availableWeather.map(w => (
+                      <option key={w} value={w} style={{ background: '#0F172A', color: '#F8FAFC' }}>
+                        📍 {w}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
+                {/* Config-changed warning: metrics cleared → need re-run */}
+                {!metrics && !loading && !isSimulating && (
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                    borderRadius: '8px',
+                    padding: '8px 10px',
+                    fontSize: '0.75rem',
+                    color: '#FCD34D',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    animation: 'pulse-ring 2s infinite',
+                  }}>
+                    ⚠ Config changed — click Re-Run to calculate
+                  </div>
+                )}
 
                 {/* Trigger Run Button */}
                 <button
@@ -285,7 +409,9 @@ export default function App() {
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    background: !metrics && !loading && !isSimulating
+                      ? 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'   // amber when stale
+                      : 'linear-gradient(135deg, #10B981 0%, #059669 100%)',  // green when fresh
                     color: '#FFFFFF',
                     border: 'none',
                     fontWeight: 700,
@@ -296,12 +422,16 @@ export default function App() {
                     justifyContent: 'center',
                     gap: '6px',
                     marginTop: '4px',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                    boxShadow: !metrics && !loading && !isSimulating
+                      ? '0 4px 16px rgba(245, 158, 11, 0.5)'
+                      : '0 4px 12px rgba(16, 185, 129, 0.3)',
+                    transition: 'all 0.3s ease',
                   }}
                 >
-                  <Play size={14} fill="#FFF" /> Re-Run Closed-Loop Agent
+                  <Play size={14} fill="#FFF" /> {!metrics && !loading && !isSimulating ? '▶ Run Simulation Now' : 'Re-Run Closed-Loop Agent'}
                 </button>
               </div>
+
 
               {/* VERTICAL NAVIGATION SIDEBAR BUTTONS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -335,16 +465,6 @@ export default function App() {
                         <Icon size={16} color={isActive ? item.color : '#64748B'} />
                         <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 700 : 500 }}>{item.label}</span>
                       </div>
-                      <span style={{
-                        fontSize: '0.68rem',
-                        padding: '2px 6px',
-                        borderRadius: '6px',
-                        background: isActive ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.04)',
-                        color: isActive ? item.color : '#64748B',
-                        fontWeight: 600
-                      }}>
-                        {item.badge}
-                      </span>
                     </button>
                   );
                 })}
@@ -360,79 +480,198 @@ export default function App() {
             {/* MAIN WORKSPACE CONTENT AREA (RIGHT SIDE) */}
             <main style={{ flex: 1, minWidth: 0 }}>
               {loading ? (
-                <div className="glass-card" style={{ textAlign: 'center', padding: '52px 36px', margin: '20px auto', maxWidth: '720px', border: '1.5px solid rgba(16, 185, 129, 0.4)', position: 'relative', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
-                  
-                  {/* Glowing Pulsing Orbital Icon */}
-                  <div style={{ position: 'relative', display: 'inline-flex', marginBottom: '24px' }}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: '-12px',
-                      borderRadius: '50%',
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      border: '1.5px solid rgba(16, 185, 129, 0.5)',
-                      animation: 'pulse-ring 2s infinite'
-                    }} />
-                    <div style={{ padding: '18px', borderRadius: '50%', background: '#0F172A', border: '1.5px solid #10B981', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <RefreshCw size={42} style={{ animation: 'spin 1.2s linear infinite' }} />
+                <div style={{ margin: '20px auto', maxWidth: '860px' }}>
+
+                  {/* ── HEADER CARD ─────────────────────────────────────── */}
+                  <div className="glass-card" style={{ padding: '28px 32px', border: '1.5px solid rgba(16, 185, 129, 0.4)', marginBottom: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.6)', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '18px' }}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {/* Dual counter-rotating ring spinner */}
+                        <div className="kpi-icon-ring" style={{ '--ring-color': '#10B981', width: 68, height: 68 }}>
+                          <div className="ring-outer" style={{ borderWidth: 3 }} />
+                          <div className="ring-inner" style={{ inset: 8, borderWidth: 2, opacity: 0.55 }} />
+                          <div className="ring-core" style={{ width: 42, height: 42, background: 'rgba(16, 185, 129, 0.15)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#F8FAFC', margin: 0, letterSpacing: '-0.3px' }}>
+                          EnergyPlus Physics Simulation Running
+                        </h3>
+                        <p style={{ fontSize: '0.88rem', color: '#94A3B8', margin: '4px 0 0 0' }}>
+                          Model: <strong style={{ color: '#FF6B6B' }}>{activeConfig.model}</strong> &nbsp;|&nbsp; Weather: <strong style={{ color: '#22D3EE' }}>{formatWeatherName(activeConfig.weather)}</strong>
+                        </p>
+                      </div>
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(16, 185, 129, 0.1)', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34D399', fontSize: '0.82rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <Timer size={15} /> {elapsedSeconds}s elapsed
+                      </div>
+                    </div>
+
+                    {/* Phase indicator */}
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {[
+                        { key: 'baseline', label: '① Baseline Run', color: '#F43F5E' },
+                        { key: 'ai', label: '② AI-Controlled Run', color: '#10B981' },
+                        { key: 'complete', label: '③ KPI Calculation', color: '#A855F7' },
+                      ].map(ph => {
+                        const phases = ['idle', 'baseline', 'ai', 'complete', 'error'];
+                        // derive phase from log presence (best proxy during streaming)
+                        const phaseActive = liveLogs.some(l =>
+                          ph.key === 'baseline' ? l.includes('Baseline Mode') :
+                          ph.key === 'ai' ? l.includes('AI-Controlled Mode') :
+                          l.includes('[RESULTS]') || l.includes('QUANTITATIVE')
+                        );
+                        const phaseCurrent = ph.key === 'baseline'
+                          ? liveLogs.length > 0 && !liveLogs.some(l => l.includes('AI-Controlled Mode'))
+                          : ph.key === 'ai'
+                          ? liveLogs.some(l => l.includes('AI-Controlled Mode')) && !simResults
+                          : !!simResults;
+                        return (
+                          <div key={ph.key} style={{
+                            padding: '6px 14px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700,
+                            background: phaseCurrent ? `rgba(${ph.color === '#F43F5E' ? '244,63,94' : ph.color === '#10B981' ? '16,185,129' : '168,85,247'},0.15)` : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${phaseCurrent ? ph.color : 'rgba(255,255,255,0.08)'}`,
+                            color: phaseCurrent ? ph.color : '#64748B',
+                            display: 'flex', alignItems: 'center', gap: '6px'
+                          }}>
+                            {phaseCurrent && <span style={{ width: 8, height: 8, borderRadius: '50%', background: ph.color, display: 'inline-block', animation: 'pulse-ring 1.5s infinite' }} />}
+                            {ph.label}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Indeterminate progress bar */}
+                    <div style={{ marginTop: '16px', width: '100%', height: '6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                      <div className="indeterminate-progress" style={{ width: '100%', height: '100%', borderRadius: '4px' }} />
                     </div>
                   </div>
 
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '8px', letterSpacing: '-0.3px' }}>
-                    EnergyPlus Physics Simulation Engine Active
-                  </h3>
-
-                  <p style={{ fontSize: '0.94rem', color: '#CBD5E1', maxWidth: '540px', margin: '0 auto 20px auto', lineHeight: 1.55 }}>
-                    Building Model: <strong style={{ color: '#FF6B6B' }}>{activeConfig.model}</strong> | Weather Profile: <strong style={{ color: '#22D3EE' }}>{formatWeatherName(activeConfig.weather)}</strong>
-                  </p>
-
-                  {/* DYNAMIC LIVE BACKEND ACTION MESSAGE BOX */}
-                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', padding: '14px 20px', marginBottom: '24px', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#34D399' }}>
-                      {backendSteps[activeStepIndex]}
-                    </span>
-                  </div>
-
-                  {/* LIVE ANIMATED INDETERMINATE SHIMMER TRACK (NO %) */}
-                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '14px', padding: '18px 24px', marginBottom: '24px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '0.88rem', fontWeight: 700 }}>
-                      <span style={{ color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Timer size={16} /> Elapsed Time: {elapsedSeconds}s
+                  {/* ── LIVE LOG TERMINAL ────────────────────────────────── */}
+                  <div style={{
+                    background: '#030712',
+                    borderRadius: '14px',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    overflow: 'hidden',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                  }}>
+                    {/* Terminal titlebar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {['#EF4444','#F59E0B','#10B981'].map((c,i) => <div key={i} style={{ width: 11, height: 11, borderRadius: '50%', background: c }} />)}
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: '#64748B', fontFamily: 'monospace', marginLeft: '6px' }}>
+                        EnergyPlus Subprocess Output — Live Stream
                       </span>
-                      <span style={{ color: '#10B981', fontSize: '0.82rem', fontWeight: 600 }}>
-                        🟢 Executing Physics Timesteps...
-                      </span>
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', color: '#10B981', fontSize: '0.75rem', fontWeight: 700 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', display: 'inline-block', animation: 'pulse-ring 1.2s infinite' }} />
+                        LIVE
+                      </div>
                     </div>
 
-                    {/* Infinite Shimmer Track (No arbitrary % text) */}
-                    <div style={{ width: '100%', height: '10px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden' }}>
-                      <div className="indeterminate-progress" style={{ width: '100%', height: '100%', borderRadius: '6px' }} />
+                    {/* Log lines */}
+                    <div
+                      id="live-log-terminal"
+                      style={{
+                        height: '320px',
+                        overflowY: 'auto',
+                        padding: '14px 18px',
+                        fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+                        fontSize: '0.76rem',
+                        lineHeight: 1.6,
+                        color: '#94A3B8',
+                      }}
+                      ref={el => { if (el) el.scrollTop = el.scrollHeight; }}
+                    >
+                      {liveLogs.length === 0 ? (
+                        <span style={{ color: '#334155' }}>Connecting to EnergyPlus subprocess...</span>
+                      ) : liveLogs.map((line, i) => {
+                        // Color-code different log line types
+                        let color = '#94A3B8';
+                        if (line.includes('Completed Successfully') || line.includes('Saved') || line.includes('[+]')) color = '#34D399';
+                        else if (line.includes('[*]') || line.includes('Starting') || line.includes('Beginning') || line.includes('===')) color = '#38BDF8';
+                        else if (line.includes('Warming up')) color = '#64748B';
+                        else if (line.includes('Initializing') || line.includes('Calculating') || line.includes('Performing') || line.includes('Adjusting') || line.includes('Computing')) color = '#CBD5E1';
+                        else if (line.includes('[!]') || line.includes('Error') || line.includes('error')) color = '#F87171';
+                        else if (line.includes('Sizing Period') || line.includes('for Sizing')) color = '#C084FC';
+                        else if (line.includes('kWh') || line.includes('kW') || line.includes('CO2') || line.includes('Compliance')) color = '#FCD34D';
+                        return (
+                          <div key={i} style={{ color, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                            {line}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Execution Badges */}
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '0.84rem', color: '#CBD5E1' }}>
-                    <span className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Cpu size={14} /> PyEnergyPlus C API
-                    </span>
-                    <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Activity size={14} /> ASHRAE 55 PMV Check
-                    </span>
-                    <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Zap size={14} /> MCP Dynamic Setpoints
-                    </span>
-                  </div>
                 </div>
               ) : (
 
+
                 <>
+                  {/* ── RESULTS SUMMARY BANNER (shown after simulation completes) ─── */}
+                  {simResults && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)',
+                      borderRadius: '20px',
+                      padding: '24px 28px',
+                      border: '1.5px solid #10B981',
+                      boxShadow: '0 0 40px rgba(16, 185, 129, 0.2)',
+                      marginBottom: '24px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🏆</div>
+                        <div>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#F8FAFC', letterSpacing: '-0.3px' }}>
+                            Simulation Complete — Quantitative Energy Savings Dashboard
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: '#34D399', fontWeight: 600, marginTop: '2px' }}>
+                            EnergyPlus Physics + Ollama MCP Agent · {activeConfig.model} · {formatWeatherName(activeConfig.weather)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSimResults(null)}
+                          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '1.1rem', padding: '4px 8px' }}
+                          title="Dismiss"
+                        >✕</button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                        {[
+                          { label: 'Baseline Energy', value: `${simResults.baseline_kwh?.toLocaleString()} kWh`, color: '#F43F5E', icon: '🔴' },
+                          { label: 'AI-Controlled Energy', value: `${simResults.ai_controlled_kwh?.toLocaleString()} kWh`, color: '#34D399', icon: '🟢' },
+                          { label: 'Net Energy Reduction', value: `${simResults.kwh_saved?.toLocaleString()} kWh`, sub: `${simResults.energy_savings_pct}% Savings`, color: '#22D3EE', icon: '⚡' },
+                          { label: 'Peak Demand Cut', value: `${simResults.peak_kw_reduction} kW`, sub: `${simResults.peak_pct_cut}% Peak Cut`, color: '#C084FC', icon: '📉' },
+                          { label: 'CO₂ Avoided', value: `${simResults.co2_saved_kg?.toLocaleString()} kg CO₂e`, color: '#4ADE80', icon: '🌱' },
+                          { label: 'Comfort Compliance', value: `${simResults.ai_comfort_compliance_pct}%`, sub: 'ASHRAE 55 PMV', color: '#FCD34D', icon: '🛋️' },
+                        ].map((item, i) => (
+                          <div key={i} style={{ background: 'rgba(15, 23, 42, 0.7)', borderRadius: '12px', padding: '14px 16px', border: `1px solid rgba(255,255,255,0.08)` }}>
+                            <div style={{ fontSize: '0.76rem', color: '#64748B', fontWeight: 600, marginBottom: '6px' }}>
+                              {item.icon} {item.label}
+                            </div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: item.color }}>
+                              {item.value}
+                            </div>
+                            {item.sub && <div style={{ fontSize: '0.76rem', color: '#34D399', fontWeight: 700, marginTop: '2px' }}>{item.sub}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Tab 0 / All: Per-Zone Closed-Loop Analytics Inspector */}
                   {(analyticsTab === 'zone-analytics' || analyticsTab === 'all') && (
                     <ZoneAnalytics 
                       baselineData={metrics?.baseline_series} 
                       aiData={metrics?.ai_series} 
-                      modelName={activeConfig.model} 
+                      modelName={activeConfig.model}
+                      modelInfo={modelInfo}
                     />
                   )}
+
 
                   {/* Tab 1 / All: Summary KPI Cards */}
                   {(analyticsTab === 'overview' || analyticsTab === 'all') && (
@@ -451,7 +690,10 @@ export default function App() {
                   {(analyticsTab === 'zones' || analyticsTab === 'all') && (
                     <ZoneMap 
                       modelName={activeConfig.model} 
+                      baselineData={metrics?.baseline_series}
+                      aiData={metrics?.ai_series}
                       telemetryData={metrics?.ai_series} 
+                      modelInfo={modelInfo}
                     />
                   )}
 

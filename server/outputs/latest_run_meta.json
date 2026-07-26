@@ -1,0 +1,19 @@
+{
+  "model": "5ZoneAirCooled.idf",
+  "weather": "USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw",
+  "period": "7days",
+  "status": "completed",
+  "completed_at": 1785069592.1076531,
+  "results": {
+    "baseline_kwh": 2173.07,
+    "ai_controlled_kwh": 2038.32,
+    "kwh_saved": 134.75,
+    "energy_savings_pct": 6.2,
+    "baseline_peak_kw": 33.81,
+    "ai_peak_kw": 17.0,
+    "peak_kw_reduction": 16.81,
+    "peak_pct_cut": 49.7,
+    "co2_saved_kg": 56.6,
+    "ai_comfort_compliance_pct": 0.0
+  }
+}

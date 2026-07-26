@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 
 from config.settings import (
     IDF_DIR,
+    MODIFIED_IDF_DIR,
     IDD_FILE,
     IDF_FILE,
     OUTPUT_DIR,
@@ -23,9 +24,10 @@ def generate_modified_idf(
     with the AI agent's actual dynamic values derived from simulation run telemetry.
     """
     baseline_path = resolve_idf_file(baseline_idf_name)
-    output_idf_path = IDF_DIR / output_filename
+    output_idf_path = MODIFIED_IDF_DIR / output_filename
     output_csv_idf_path = OUTPUT_DIR / output_filename
     root_outputs_idf_path = Path(__file__).resolve().parent.parent / "outputs" / output_filename
+
 
 
     # Default fallback setpoint profile if records are empty

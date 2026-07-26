@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, 
   Activity, 
@@ -19,22 +19,87 @@ import {
   Loader2
 } from 'lucide-react';
 
-export default function ZoneAnalytics({ baselineData = [], aiData = [], modelName = '5ZoneAirCooled.idf', summary = null }) {
-  const zonesList = [
-    { id: 'SPACE1-1', label: 'SPACE1-1', desc: 'Perimeter South (Direct Solar Load)' },
-    { id: 'SPACE2-1', label: 'SPACE2-1', desc: 'Core Zone (High Internal Gains)' },
-    { id: 'SPACE3-1', label: 'SPACE3-1', desc: 'Perimeter North (Shaded Zone)' },
-    { id: 'SPACE4-1', label: 'SPACE4-1', desc: 'Perimeter East (Morning Solar)' },
-    { id: 'SPACE5-1', label: 'SPACE5-1', desc: 'Perimeter West (Evening Solar)' },
-    { id: 'PLENUM-1', label: 'PLENUM-1', desc: 'Return Air Ceiling Plenum' },
-  ];
+// ── Zone description heuristics — works for any building zone name ────────────
+function describeZone(id, modelName) {
+  const name = id.toLowerCase();
+  if (name.includes('plenum')) return 'Return Air Ceiling Plenum';
+  if (name.includes('core')) return 'Core Zone (High Internal Gains)';
+  if (name.includes('attic') || name.includes('roof')) return 'Attic / Roof Zone';
+  if (name.includes('basement') || name.includes('ground')) return 'Basement / Ground Floor';
+  if (name.includes('south') || name.includes('_s_')) return 'South Perimeter (Direct Solar Load)';
+  if (name.includes('north') || name.includes('_n_')) return 'North Perimeter (Shaded Exposure)';
+  if (name.includes('east') || name.includes('_e_')) return 'East Perimeter (Morning Solar)';
+  if (name.includes('west') || name.includes('_w_')) return 'West Perimeter (Evening Solar)';
+  if (name.includes('space1') || name.match(/zone[\s_-]?1$/)) return 'Perimeter South (Direct Solar Load)';
+  if (name.includes('space2') || name.match(/zone[\s_-]?2$/)) return 'Core Zone (High Internal Gains)';
+  if (name.includes('space3') || name.match(/zone[\s_-]?3$/)) return 'Perimeter North (Shaded Zone)';
+  if (name.includes('space4') || name.match(/zone[\s_-]?4$/)) return 'Perimeter East (Morning Solar)';
+  if (name.includes('space5') || name.match(/zone[\s_-]?5$/)) return 'Perimeter West (Evening Solar)';
+  if (name.includes('corridor') || name.includes('hall')) return 'Corridor / Hallway';
+  if (name.includes('stair')) return 'Stairwell Zone';
+  if (name.includes('mech') || name.includes('utility')) return 'Mechanical / Utility Room';
+  if (name.includes('office')) return 'Open Office Area';
+  if (name.includes('conf') || name.includes('meeting')) return 'Conference Room';
+  return `Thermal Zone (${id})`;
+}
 
-  const [selectedZone, setSelectedZone] = useState('SPACE1-1');
+export default function ZoneAnalytics({ baselineData = [], aiData = [], modelName = '5ZoneAirCooled.idf', summary = null, modelInfo = null }) {
 
-  const zoneInfo = zonesList.find(z => z.id === selectedZone) || zonesList[0];
+  // ── Derive zone list from actual CSV columns (ground truth from simulation) ──
+  // Priority: 1) temp_* column names in CSV  2) modelInfo.zones  3) hardcoded fallback
+  const zonesList = useMemo(() => {
+    // Source 1: CSV data — extract zone names from temp_* columns
+    const sourceData = (baselineData && baselineData.length > 0) ? baselineData : (aiData && aiData.length > 0 ? aiData : []);
+    if (sourceData.length > 0) {
+      const firstRow = sourceData[0];
+      const zoneIds = Object.keys(firstRow)
+        .filter(k => k.startsWith('temp_'))
+        .map(k => k.replace('temp_', ''))
+        .sort();
+      if (zoneIds.length > 0) {
+        return zoneIds.map(id => ({ id, label: id, desc: describeZone(id, modelName) }));
+      }
+    }
 
-  // Helper to safely format numbers
-  const fmt = (val, d = 2) => (val !== undefined && val !== null ? Number(val).toFixed(d) : '0.00');
+    // Source 2: modelInfo from /api/building-model
+    if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
+      return modelInfo.zones.map(id => ({ id, label: id, desc: describeZone(id, modelName) }));
+    }
+
+    // Source 3: hardcoded fallback (5ZoneAirCooled)
+    return [
+      { id: 'SPACE1-1', label: 'SPACE1-1', desc: 'Perimeter South (Direct Solar Load)' },
+      { id: 'SPACE2-1', label: 'SPACE2-1', desc: 'Core Zone (High Internal Gains)' },
+      { id: 'SPACE3-1', label: 'SPACE3-1', desc: 'Perimeter North (Shaded Zone)' },
+      { id: 'SPACE4-1', label: 'SPACE4-1', desc: 'Perimeter East (Morning Solar)' },
+      { id: 'SPACE5-1', label: 'SPACE5-1', desc: 'Perimeter West (Evening Solar)' },
+      { id: 'PLENUM-1', label: 'PLENUM-1', desc: 'Return Air Ceiling Plenum' },
+    ];
+  }, [baselineData, aiData, modelInfo, modelName]);
+
+  // Reset selected zone when building changes (zone list changes)
+  const [selectedZone, setSelectedZone] = useState(() => zonesList[0]?.id || '');
+  useEffect(() => {
+    // When zonesList changes (new building loaded), auto-select first zone
+    if (zonesList.length > 0 && !zonesList.find(z => z.id === selectedZone)) {
+      setSelectedZone(zonesList[0].id);
+    }
+  }, [zonesList]);
+
+  // Get zone description and occupancy count from real modelInfo people data
+  const zoneInfo = zonesList.find(z => z.id === selectedZone) || zonesList[0] || { id: '', label: '', desc: '' };
+  const zonePeople = modelInfo?.people?.filter(p => p.zone === selectedZone) ?? [];
+
+
+
+  // Helper to safely format numbers — shows '—' when value is null/undefined (no simulation data)
+  const fmt = (val, d = 2) => (val !== undefined && val !== null && !isNaN(Number(val)) ? Number(val).toFixed(d) : '—');
+  const fmtPmv = (val) => {
+    if (val === null || val === undefined || isNaN(Number(val))) return '—';
+    const n = Number(val);
+    return n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+  };
+
 
   // Extract total energy consumption metrics (Terminal Deliverable Metrics) directly from summary or real CSV series
   const hasData = (baselineData && baselineData.length > 0) || (aiData && aiData.length > 0) || summary;
@@ -52,37 +117,66 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
   const co2SavedKg = summary?.co2_saved_kg ?? (kwhSaved * 0.42);
   const comfortCompliance = summary?.comfort_compliance_pct ?? 100.0;
 
-  // Extract live zone-specific telemetry values directly from real calculation records
+  // Extract live zone-specific telemetry: use row with maximum occupancy (or peak power if no occupants)
+  // This ensures we show meaningful daytime values, not midnight/unoccupied zeros
   const getZoneMetrics = (dataList, isAi = false) => {
     if (!dataList || dataList.length === 0) {
-      return { temp: 0.0, humidity: 0.0, pmv: 0.0, occ: 0, power: 0.0, clg: isAi ? 24.5 : 23.0, htg: isAi ? 20.5 : 20.0, kwh: 0.0 };
+      return { temp: null, humidity: null, pmv: null, occ: null, power: null, clg: null, htg: null, kwh: null };
     }
-    const last = dataList[dataList.length - 1];
-    
+
+    const occKey = `occ_${selectedZone}`;
     const tempKey = `temp_${selectedZone}`;
     const humKey = `humidity_${selectedZone}`;
     const pmvKey = `pmv_${selectedZone}`;
     const pwrKey = `power_${selectedZone}`;
     const kwhKey = `kwh_${selectedZone}`;
-    const occKey = `occ_${selectedZone}`;
 
-    const temp = last[tempKey] ?? last.avg_indoor_temp ?? 0.0;
-    const humidity = last[humKey] ?? last.humidity ?? 0.0;
-    const pmv = last[pmvKey] ?? last.avg_pmv ?? 0.0;
-    const power = last[pwrKey] ?? last.electric_power_kw ?? 0.0;
-    const kwh = last[kwhKey] ?? last.cumulative_kwh ?? 0.0;
-    const occ = last[occKey] ?? last.total_occupancy ?? 0;
+    // 1. Find rows where this zone has occupants
+    const occupiedRows = dataList.filter(r => (r[occKey] ?? r.total_occupancy ?? 0) > 0);
 
-    const clg = last.cooling_setpoint ?? (isAi ? 24.5 : 23.0);
-    const htg = last.heating_setpoint ?? (isAi ? 20.5 : 20.0);
+    // 2. Pick the peak occupancy row; fall back to peak power row; fall back to last row
+    let row;
+    if (occupiedRows.length > 0) {
+      // Among occupied rows, pick the one with highest occupancy (or highest PMV/temp if tied)
+      row = occupiedRows.reduce((best, r) => {
+        const bestOcc = best[occKey] ?? best.total_occupancy ?? 0;
+        const rOcc = r[occKey] ?? r.total_occupancy ?? 0;
+        return rOcc > bestOcc ? r : best;
+      });
+    } else {
+      // No occupied rows: pick the row with highest zone power (most active HVAC moment)
+      row = dataList.reduce((best, r) => {
+        const bestPwr = best[pwrKey] ?? best.electric_power_kw ?? 0;
+        const rPwr = r[pwrKey] ?? r.electric_power_kw ?? 0;
+        return rPwr > bestPwr ? r : best;
+      });
+    }
+
+    const temp = row[tempKey] ?? row.avg_indoor_temp ?? null;
+    const humidity = row[humKey] ?? row.humidity ?? null;
+    const pmv = row[pmvKey] ?? row.avg_pmv ?? null;
+    const power = row[pwrKey] ?? row.electric_power_kw ?? null;
+    const kwh = dataList[dataList.length - 1][kwhKey] ?? dataList[dataList.length - 1].cumulative_kwh ?? null;
+    const occ = row[occKey] ?? row.total_occupancy ?? null;
+    const clg = row.cooling_setpoint ?? null;
+    const htg = row.heating_setpoint ?? null;
 
     return { temp, humidity, pmv, occ, power, clg, htg, kwh };
   };
 
+
   const baseMetrics = getZoneMetrics(baselineData, false);
   const aiMetrics = getZoneMetrics(aiData, true);
 
-  const pmvCompliant = Math.abs(aiMetrics.pmv) <= 0.5;
+  const pmvLabel = (pmv) => {
+    if (pmv === null || pmv === undefined) return 'No Data';
+    const n = Number(pmv);
+    if (n < -0.5) return 'Too Cold';
+    if (n > 0.5) return 'Too Warm';
+    return 'Optimal';
+  };
+
+  const pmvCompliant = aiMetrics.pmv !== null && Math.abs(Number(aiMetrics.pmv)) <= 0.5;
 
   if (!hasData) {
     return (
@@ -284,21 +378,38 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 🔴 Without AI (Baseline)
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.86rem', color: '#94A3B8' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Dry-Bulb Air Temperature measured by EnergyPlus zone sensors under unoptimized baseline control.&#10;• Represents: Baseline indoor air temperature&#10;• Target Range: 20.0 °C to 26.0 °C (68 °F to 78.8 °F)"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Thermometer size={14} /> Air Temp:</span>
                   <strong style={{ color: '#F8FAFC' }}>{fmt(baseMetrics.temp, 2)} °C</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Indoor Relative Humidity percentage inside the zone.&#10;• Represents: Moisture level in zone air&#10;• Target Range: 30% to 60% RH"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Droplets size={14} /> Air Humidity:</span>
                   <strong style={{ color: '#F8FAFC' }}>{fmt(baseMetrics.humidity, 1)} % RH</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Predicted Mean Vote thermal comfort index (Fanger model / ASHRAE 55).&#10;• Represents: Human thermal sensation score&#10;• Scale: -3.0 (Cold) to +3.0 (Hot)&#10;• (+) Values = Warmer / Overheating&#10;• (-) Values = Cooler / Overcooling&#10;• ASHRAE 55 Target Range: -0.50 to +0.50 (Neutral Comfort)"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Activity size={14} /> PMV Index:</span>
-                  <strong style={{ color: '#EF4444' }}>{baseMetrics.pmv >= 0 ? `+${fmt(baseMetrics.pmv, 2)}` : fmt(baseMetrics.pmv, 2)}</strong>
+                  <strong style={{ color: '#EF4444' }}>{fmtPmv(baseMetrics.pmv)} <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>({pmvLabel(baseMetrics.pmv)})</span></strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Number of occupants inside the thermal zone at the current timestep.&#10;• Represents: Real-time human occupancy load&#10;• Range: 0 (Unoccupied) to Design Capacity (e.g. 10-50 People)"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Users size={14} /> Occupancy:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{baseMetrics.occ} People</strong>
+                  <strong style={{ color: '#F8FAFC' }}>
+                    {baseMetrics.occ !== null
+                      ? `${fmt(baseMetrics.occ, 0)} People`
+                      : zonePeople.length === 0 ? 'Unoccupied Zone' : '— People'
+                    }
+                  </strong>
                 </div>
               </div>
             </div>
@@ -309,21 +420,38 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 🟢 With AI (EcoLoop MCP)
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.86rem', color: '#94A3B8' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Dry-Bulb Air Temperature under EcoLoop AI dynamic setpoint optimization.&#10;• Represents: AI-controlled indoor air temperature&#10;• Target Range: 20.0 °C to 26.0 °C (68 °F to 78.8 °F)"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Thermometer size={14} /> Air Temp:</span>
                   <strong style={{ color: '#34D399' }}>{fmt(aiMetrics.temp, 2)} °C</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Indoor Relative Humidity percentage under AI control.&#10;• Represents: AI-managed moisture level&#10;• Target Range: 30% to 60% RH"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Droplets size={14} /> Air Humidity:</span>
                   <strong style={{ color: '#F8FAFC' }}>{fmt(aiMetrics.humidity, 1)} % RH</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Predicted Mean Vote thermal comfort index under EcoLoop AI control.&#10;• Represents: AI-optimized human thermal sensation&#10;• ASHRAE 55 Target Range: -0.50 to +0.50 (Optimal Neutral)"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Activity size={14} /> PMV Index:</span>
-                  <strong style={{ color: '#34D399' }}>{aiMetrics.pmv >= 0 ? `+${fmt(aiMetrics.pmv, 2)}` : fmt(aiMetrics.pmv, 2)}</strong>
+                  <strong style={{ color: '#34D399' }}>{fmtPmv(aiMetrics.pmv)} <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>({pmvLabel(aiMetrics.pmv)})</span></strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div 
+                  title="Number of occupants inside the thermal zone.&#10;• Represents: Real-time human occupancy load&#10;• Range: 0 to Design Capacity"
+                  style={{ display: 'flex', justifyContent: 'space-between', cursor: 'help' }}
+                >
                   <span><Users size={14} /> Occupancy:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{aiMetrics.occ} People</strong>
+                  <strong style={{ color: '#F8FAFC' }}>
+                    {aiMetrics.occ !== null
+                      ? `${fmt(aiMetrics.occ, 0)} People`
+                      : zonePeople.length === 0 ? 'Unoccupied Zone' : '— People'
+                    }
+                  </strong>
                 </div>
               </div>
             </div>
@@ -341,18 +469,27 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div 
+              title="Electric Power Demand under unoptimized baseline control.&#10;• Represents: Facility HVAC power draw&#10;• Range: 5 kW to 100 kW depending on building size"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'help' }}
+            >
               <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>🔴 Baseline Power Demand:</div>
               <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#F43F5E' }}>{fmt(baseMetrics.power, 2)} kW</div>
             </div>
 
-            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+            <div 
+              title="Electric Power Demand optimized by EcoLoop AI agent.&#10;• Represents: Real-time AI optimized power draw&#10;• Target: 5% to 35% lower than baseline kW"
+              style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)', cursor: 'help' }}
+            >
               <div style={{ fontSize: '0.78rem', color: '#34D399', marginBottom: '4px' }}>🟢 AI Power Demand:</div>
               <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#34D399' }}>{fmt(aiMetrics.power, 2)} kW</div>
             </div>
           </div>
 
-          <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(168, 85, 247, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', fontWeight: 700 }}>
+          <div 
+            title="Instantaneous reduction in electric demand during peak utility tariff hours.&#10;• Represents: kW demand cut & peak demand charge savings&#10;• Target Range: 10% to 40% peak cut"
+            style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(168, 85, 247, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', fontWeight: 700, cursor: 'help' }}
+          >
             <span style={{ color: '#C084FC' }}>⚡ Instantaneous Peak kW Cut:</span>
             <span style={{ color: '#34D399' }}>-{fmt(baseMetrics.power - aiMetrics.power, 2)} kW ({fmt(peakPctCut, 1)}% Cut)</span>
           </div>
@@ -369,12 +506,18 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div 
+              title="Cumulative HVAC electricity consumed over the simulation run period.&#10;• Represents: Total kilowatt-hours (kWh) electricity used&#10;• Target: 5% to 25% energy reduction vs baseline"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'help' }}
+            >
               <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>⚡ Cumulative Energy Consumed:</div>
               <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#34D399' }}>{fmt(aiKwh, 2)} kWh <span style={{ fontSize: '0.76rem', color: '#94A3B8' }}>(vs {fmt(baseKwh, 2)} kWh)</span></div>
             </div>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div 
+              title="Total greenhouse gas emissions prevented by reducing building electricity consumption.&#10;• Represents: Carbon footprint reduction in kg CO2e&#10;• Conversion Rate: ~0.42 kg CO2e per kWh saved"
+              style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'help' }}
+            >
               <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>🌱 Avoided Carbon Emissions:</div>
               <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#34D399' }}>{fmt(co2SavedKg, 2)} kg CO2e</div>
             </div>

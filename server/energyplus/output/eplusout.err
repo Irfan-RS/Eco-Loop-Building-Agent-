@@ -1,5 +1,10 @@
-Program Version,EnergyPlus, Version 26.1.0-6f2e40d102, YMD=2026.07.26 12:39,
+Program Version,EnergyPlus, Version 26.1.0-6f2e40d102, YMD=2026.07.26 18:09,
    ************* Beginning Zone Sizing Calculations
+   ** Warning ** Weather file location will be used rather than entered (IDF) Location object.
+   **   ~~~   ** ..Location object=CHICAGO_IL_USA TMY2-94846
+   **   ~~~   ** ..Weather File Location=San Francisco Intl Ap CA USA TMY3 WMO#=724940
+   **   ~~~   ** ..due to location differences, Latitude difference=[4.16] degrees, Longitude difference=[34.65] degrees.
+   **   ~~~   ** ..Time Zone difference=[2.0] hour(s), Elevation difference=[98.95] percent, [188.00] meters.
    ************* Beginning System Sizing Calculations
    ************* Beginning Plant Sizing Calculations
    ************* Testing Individual Branch Integrity
@@ -19,5 +24,5 @@ Program Version,EnergyPlus, Version 26.1.0-6f2e40d102, YMD=2026.07.26 12:39,
    ************* Key=*, VarName=FACILITY TOTAL BUILDING ELECTRIC DEMAND POWER, Frequency=TimeStep
    ************* Key=*, VarName=ZONE THERMAL COMFORT FANGER MODEL PMV, Frequency=TimeStep
    ************* EnergyPlus Warmup Error Summary. During Warmup: 0 Warning; 0 Severe Errors.
-   ************* EnergyPlus Sizing Error Summary. During Sizing: 0 Warning; 0 Severe Errors.
-   ************* EnergyPlus Completed Successfully-- 0 Warning; 0 Severe Errors; Elapsed Time=00hr 00min  2.94sec
+   ************* EnergyPlus Sizing Error Summary. During Sizing: 1 Warning; 0 Severe Errors.
+   ************* EnergyPlus Completed Successfully-- 1 Warning; 0 Severe Errors; Elapsed Time=00hr 00min  3.12sec

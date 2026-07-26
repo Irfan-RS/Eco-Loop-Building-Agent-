@@ -9,3 +9,8 @@ frontend/node_modules/
 frontend/dist/
 .pytest_cache/
 .DS_Store
+server/energyplus/output/run_*
+server/energyplus/output/*.sql
+server/outputs/run_*
+server/energyplus/modified_idf/*
+!server/energyplus/modified_idf/.gitkeep
