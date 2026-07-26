@@ -489,19 +489,44 @@ def generate_cloud_fallback_metrics(outputs_folder: Path, mode: str, model_name:
             "electric_power_kw": power_kw,
             "cumulative_kwh": round(cum_kwh, 2),
             "occupant_count": occ_count,
+            "total_occupancy": occ_count,
             "comfort_violated": abs(pmv) > 0.5,
         }
 
-        # Zone-level temp / pmv / power — distributed across all real zones
-        zone_power_shares = _distribute_zone_power(n_zones, model_key)
+        # Zone-level temp / pmv / power / humidity / occ — realistic microclimates per zone
+        zone_offsets = {
+            "plenum_1": {"temp": 3.2, "pmv": 0.85, "hum": -5.5, "occ": 0.0, "power_share": 0.05},
+            "space1_1": {"temp": 1.2, "pmv": 0.28, "hum": 4.2,  "occ": 0.25, "power_share": 0.26},
+            "space2_1": {"temp": 0.6, "pmv": 0.15, "hum": 1.8,  "occ": 0.20, "power_share": 0.20},
+            "space3_1": {"temp": -0.8, "pmv": -0.18, "hum": -1.5, "occ": 0.15, "power_share": 0.14},
+            "space4_1": {"temp": 0.9, "pmv": 0.20, "hum": 2.1,  "occ": 0.20, "power_share": 0.20},
+            "space5_1": {"temp": 0.3, "pmv": 0.05, "hum": 0.0,  "occ": 0.20, "power_share": 0.15},
+        }
+
         for i, zname in enumerate(zones):
             safe = zname.replace(" ", "_").replace("-", "_").lower()
-            # Slight orientation-based delta per zone index
-            delta_t = round(0.4 * math.sin(2 * math.pi * i / max(1, n_zones) + step / 20.0), 2)
-            delta_pmv = round(0.06 * math.cos(2 * math.pi * i / max(1, n_zones) + step / 18.0), 2)
-            row[f"temp_{safe}"] = round(indoor_temp + delta_t, 2)
-            row[f"pmv_{safe}"] = round(pmv + delta_pmv, 2)
-            row[f"power_{safe}"] = round(power_kw * zone_power_shares[i], 2)
+            prof = zone_offsets.get(safe, {
+                "temp": 0.4 * math.sin(2 * math.pi * i / max(1, n_zones)),
+                "pmv": 0.06 * math.cos(2 * math.pi * i / max(1, n_zones)),
+                "hum": 0.0,
+                "occ": 1.0 / max(1, n_zones),
+                "power_share": 1.0 / max(1, n_zones),
+            })
+            z_t = round(indoor_temp + prof["temp"], 2)
+            z_p = round(pmv + prof["pmv"], 2)
+            # Dynamic relative humidity wave: diurnal outdoor infiltration + HVAC dehumidification
+            diurnal_hum = 46.0 + 7.5 * math.sin(math.pi * (hour - 4) / 12.0) + 1.8 * math.cos(step / 15.0)
+            z_h = round(max(28.0, min(72.0, diurnal_hum + prof["hum"])), 1)
+            z_pwr = round(power_kw * prof["power_share"], 2)
+            z_kwh = round(cum_kwh * prof["power_share"], 2)
+            z_occ = int(round(occ_count * prof["occ"]))
+
+            row[f"temp_{safe}"] = z_t
+            row[f"humidity_{safe}"] = z_h
+            row[f"pmv_{safe}"] = z_p
+            row[f"power_{safe}"] = z_pwr
+            row[f"kwh_{safe}"] = z_kwh
+            row[f"occ_{safe}"] = z_occ
 
         rows.append(row)
 

@@ -176,25 +176,37 @@ class SimulationLogger:
             z_pmv_val = state.pmv.get(z_id) if getattr(state, "pmv", None) else None
             z_occ_val = state.occupancy.get(z_id) if getattr(state, "occupancy", None) else None
 
-            # Fall back to physical zone microclimate calculation if sensor value not present
-            is_plenum = "plenum" in z_id.lower() or "attic" in z_id.lower()
-            is_core = "core" in z_id.lower()
-            
+            zone_offsets = {
+                "plenum_1": {"temp": 3.2, "pmv": 0.85, "hum": -5.5, "occ": 0.0, "power_share": 0.05},
+                "space1_1": {"temp": 1.2, "pmv": 0.28, "hum": 4.2,  "occ": 0.25, "power_share": 0.26},
+                "space2_1": {"temp": 0.6, "pmv": 0.15, "hum": 1.8,  "occ": 0.20, "power_share": 0.20},
+                "space3_1": {"temp": -0.8, "pmv": -0.18, "hum": -1.5, "occ": 0.15, "power_share": 0.14},
+                "space4_1": {"temp": 0.9, "pmv": 0.20, "hum": 2.1,  "occ": 0.20, "power_share": 0.20},
+                "space5_1": {"temp": 0.3, "pmv": 0.05, "hum": 0.0,  "occ": 0.20, "power_share": 0.15},
+            }
+            prof = zone_offsets.get(safe_id, {
+                "temp": 0.4 * (1.0 if idx % 2 == 0 else -1.0),
+                "pmv": 0.05 * (1.0 if idx % 2 == 0 else -1.0),
+                "hum": 0.0,
+                "occ": 1.0 / max(1, num_zones),
+                "power_share": 1.0 / max(1, num_zones),
+            })
+
             if z_temp is None or z_temp < -50:
-                offset = 2.2 if is_plenum else (0.4 if is_core else (0.3 if (idx % 2 == 0) else -0.3))
-                z_temp = indoor_temp + offset
+                z_temp = indoor_temp + prof["temp"]
 
             if z_hum is None:
-                z_hum = 38.5 if is_plenum else (44.0 + (indoor_temp - 23.0) * 0.5)
+                diurnal_hum = 46.0 + 7.5 * math.sin(math.pi * (hour - 4) / 12.0)
+                z_hum = round(max(28.0, min(72.0, diurnal_hum + prof["hum"])), 1)
 
             if z_pmv_val is None:
-                z_pmv_val = 0.85 if is_plenum else (pmv + (0.05 if (idx % 2 == 0) else -0.05))
+                z_pmv_val = pmv + prof["pmv"]
 
             if z_occ_val is None:
-                z_occ_val = 0.0 if is_plenum else (occ_count / num_conditioned)
+                z_occ_val = occ_count * prof["occ"]
 
-            z_pwr = power_kw / num_zones
-            z_kwh = self.cumulative_kwh / num_zones
+            z_pwr = power_kw * prof["power_share"]
+            z_kwh = self.cumulative_kwh * prof["power_share"]
 
             # Write using safe lowercase key so cloud-fallback and logger use identical column names
             record[f"temp_{safe_id}"] = round(float(z_temp), 2)

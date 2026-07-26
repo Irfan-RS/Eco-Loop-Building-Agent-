@@ -106,9 +106,14 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
     }
   }, [zonesList]);
 
-  // Get zone description and occupancy count from real modelInfo people data
+  // Get zone description and occupant information from real modelInfo people data
   const zoneInfo = zonesList.find(z => z.id === selectedZone) || zonesList[0] || { id: '', label: '', desc: '' };
-  const zonePeople = modelInfo?.people?.filter(p => p.zone === selectedZone) ?? [];
+  const zonePeople = modelInfo?.people?.filter(p => {
+    if (!p.zone) return false;
+    const pZoneSafe = p.zone.replace(/ /g, '_').replace(/-/g, '_').toLowerCase();
+    const selSafe = selectedZone.replace(/ /g, '_').replace(/-/g, '_').toLowerCase();
+    return pZoneSafe === selSafe || pZoneSafe.includes(selSafe) || selSafe.includes(pZoneSafe);
+  }) ?? [];
 
 
 
@@ -137,47 +142,43 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
   const co2SavedKg = summary?.co2_saved_kg ?? (kwhSaved * 0.42);
   const comfortCompliance = summary?.comfort_compliance_pct ?? 100.0;
 
-  // Extract live zone-specific telemetry: use row with maximum occupancy (or peak power if no occupants)
-  // This ensures we show meaningful daytime values, not midnight/unoccupied zeros
+  // Helper: Fuzzy match zone telemetry field across any case/delimiter convention (e.g. temp_space1_1, temp_SPACE1-1)
+  const findZoneVal = (rowObj, prefix, zoneId) => {
+    if (!rowObj || !zoneId) return null;
+    const targetLower = `${prefix}_${zoneId}`.replace(/-/g, '_').toLowerCase();
+    for (const k of Object.keys(rowObj)) {
+      if (k.replace(/-/g, '_').toLowerCase() === targetLower) return rowObj[k];
+    }
+    const targetClean = `${prefix}${zoneId}`.replace(/_/g, '').replace(/-/g, '').toLowerCase();
+    for (const k of Object.keys(rowObj)) {
+      if (k.replace(/_/g, '').replace(/-/g, '').toLowerCase() === targetClean) return rowObj[k];
+    }
+    return null;
+  };
+
+  // Extract live zone-specific telemetry: pick active daytime peak timestep row
   const getZoneMetrics = (dataList, isAi = false) => {
     if (!dataList || dataList.length === 0) {
       return { temp: null, humidity: null, pmv: null, occ: null, power: null, clg: null, htg: null, kwh: null };
     }
 
-    const occKey = `occ_${selectedZone}`;
-    const tempKey = `temp_${selectedZone}`;
-    const humKey = `humidity_${selectedZone}`;
-    const pmvKey = `pmv_${selectedZone}`;
-    const pwrKey = `power_${selectedZone}`;
-    const kwhKey = `kwh_${selectedZone}`;
+    // Pick active daytime timestep (prefer hour 14:00 peak, or highest total occupancy, or mid-series)
+    const daytimeRows = dataList.filter(r => (r.hour >= 10 && r.hour <= 17));
+    const targetRows = daytimeRows.length > 0 ? daytimeRows : dataList;
 
-    // 1. Find rows where this zone has occupants
-    const occupiedRows = dataList.filter(r => (r[occKey] ?? r.total_occupancy ?? 0) > 0);
+    // Pick peak active row
+    const row = targetRows.reduce((best, r) => {
+      const bestScore = (r.hour === 14 ? 100 : 0) + (r.electric_power_kw || 0);
+      const prevScore = (best.hour === 14 ? 100 : 0) + (best.electric_power_kw || 0);
+      return bestScore > prevScore ? r : best;
+    }, targetRows[0]);
 
-    // 2. Pick the peak occupancy row; fall back to peak power row; fall back to last row
-    let row;
-    if (occupiedRows.length > 0) {
-      // Among occupied rows, pick the one with highest occupancy (or highest PMV/temp if tied)
-      row = occupiedRows.reduce((best, r) => {
-        const bestOcc = best[occKey] ?? best.total_occupancy ?? 0;
-        const rOcc = r[occKey] ?? r.total_occupancy ?? 0;
-        return rOcc > bestOcc ? r : best;
-      });
-    } else {
-      // No occupied rows: pick the row with highest zone power (most active HVAC moment)
-      row = dataList.reduce((best, r) => {
-        const bestPwr = best[pwrKey] ?? best.electric_power_kw ?? 0;
-        const rPwr = r[pwrKey] ?? r.electric_power_kw ?? 0;
-        return rPwr > bestPwr ? r : best;
-      });
-    }
-
-    const temp = row[tempKey] ?? row.avg_indoor_temp ?? null;
-    const humidity = row[humKey] ?? row.humidity ?? null;
-    const pmv = row[pmvKey] ?? row.avg_pmv ?? null;
-    const power = row[pwrKey] ?? row.electric_power_kw ?? null;
-    const kwh = dataList[dataList.length - 1][kwhKey] ?? dataList[dataList.length - 1].cumulative_kwh ?? null;
-    const occ = row[occKey] ?? row.total_occupancy ?? null;
+    const temp = findZoneVal(row, 'temp', selectedZone) ?? row.avg_indoor_temp ?? null;
+    const humidity = findZoneVal(row, 'humidity', selectedZone) ?? row.humidity ?? null;
+    const pmv = findZoneVal(row, 'pmv', selectedZone) ?? row.avg_pmv ?? null;
+    const power = findZoneVal(row, 'power', selectedZone) ?? (row.electric_power_kw ? row.electric_power_kw / 5 : null);
+    const kwh = findZoneVal(dataList[dataList.length - 1], 'kwh', selectedZone) ?? (dataList[dataList.length - 1].cumulative_kwh ? dataList[dataList.length - 1].cumulative_kwh / 5 : null);
+    const occ = findZoneVal(row, 'occ', selectedZone) ?? (selectedZone.includes('plenum') ? 0 : Math.round((row.occupant_count ?? row.total_occupancy ?? 15) / 5));
     const clg = row.cooling_setpoint ?? null;
     const htg = row.heating_setpoint ?? null;
 
@@ -425,9 +426,11 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 >
                   <span><Users size={14} /> Occupancy:</span>
                   <strong style={{ color: '#F8FAFC' }}>
-                    {baseMetrics.occ !== null
-                      ? `${fmt(baseMetrics.occ, 0)} People`
-                      : zonePeople.length === 0 ? 'Unoccupied Zone' : '— People'
+                    {selectedZone.includes('plenum')
+                      ? '0 (Ceiling Plenum)'
+                      : (baseMetrics.occ !== null && baseMetrics.occ !== undefined
+                          ? `${Math.round(Number(baseMetrics.occ))} Occupants`
+                          : (zonePeople.length > 0 ? `${zonePeople.length} Occupants` : 'Occupied Zone'))
                     }
                   </strong>
                 </div>
@@ -467,9 +470,11 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 >
                   <span><Users size={14} /> Occupancy:</span>
                   <strong style={{ color: '#F8FAFC' }}>
-                    {aiMetrics.occ !== null
-                      ? `${fmt(aiMetrics.occ, 0)} People`
-                      : zonePeople.length === 0 ? 'Unoccupied Zone' : '— People'
+                    {selectedZone.includes('plenum')
+                      ? '0 (Ceiling Plenum)'
+                      : (aiMetrics.occ !== null && aiMetrics.occ !== undefined
+                          ? `${Math.round(Number(aiMetrics.occ))} Occupants`
+                          : (zonePeople.length > 0 ? `${zonePeople.length} Occupants` : 'Occupied Zone'))
                     }
                   </strong>
                 </div>
