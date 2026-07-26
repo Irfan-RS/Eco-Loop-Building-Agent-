@@ -311,6 +311,7 @@ def generate_cloud_fallback_metrics(outputs_folder: Path, mode: str, model_name:
             "electric_power_kw": power_kw,
             "cumulative_kwh": round(cum_kwh, 2),
             "occupant_count": occ_count,
+            "total_occupancy": occ_count,
             "comfort_violated": abs(pmv) > 0.5,
             # Zone specific columns
             "temp_core": indoor_temp,

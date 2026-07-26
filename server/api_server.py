@@ -335,8 +335,17 @@ def get_metrics(model: str = None, weather: str = None):
 
     co2_saved_kg = kwh_saved * 0.42
 
-    occupied_ai = df_ai[df_ai["total_occupancy"] > 0]
-    compliance_rate = (1.0 - float(occupied_ai["comfort_violated"].mean())) * 100.0 if not occupied_ai.empty else 100.0
+    occ_col = "total_occupancy" if "total_occupancy" in df_ai.columns else ("occupant_count" if "occupant_count" in df_ai.columns else None)
+    if occ_col:
+        occupied_ai = df_ai[df_ai[occ_col] > 0]
+    else:
+        occupied_ai = df_ai
+
+    if "comfort_violated" in occupied_ai.columns and not occupied_ai.empty:
+        compliance_rate = (1.0 - float(occupied_ai["comfort_violated"].mean())) * 100.0
+    else:
+        compliance_rate = 100.0
+
 
     summary = {
         "baseline_kwh": round(base_kwh, 2),
