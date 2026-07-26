@@ -52,7 +52,7 @@ outputs_folder = BASE_DIR / "outputs"
 
 active_config = {
     "model": "5ZoneAirCooled.idf",
-    "weather": "Chicago_OHare_TMY3.epw",
+    "weather": "USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw",
     "period": "5days",
 }
 
@@ -327,11 +327,16 @@ def get_metrics(model: str = None, weather: str = None):
     ai_file = outputs_folder / "aicontrolled_metrics.csv"
 
     if not base_file.exists() or not ai_file.exists():
-        return {
-            "status": "no_data",
-            "message": "No simulation data found. Click Calculate to run EnergyPlus simulation.",
-            "active_config": active_config,
-        }
+        try:
+            from simulator.runner import generate_cloud_fallback_metrics
+            generate_cloud_fallback_metrics(outputs_folder, "Baseline", target_model, target_weather)
+            generate_cloud_fallback_metrics(outputs_folder, "AI-Controlled", target_model, target_weather)
+        except Exception as err:
+            return {
+                "status": "no_data",
+                "message": f"No simulation data found: {err}",
+                "active_config": active_config,
+            }
 
     try:
         df_base = pd.read_csv(base_file)
