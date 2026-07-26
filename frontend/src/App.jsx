@@ -234,12 +234,20 @@ export default function App() {
   };
 
   const formatWeatherName = (w) => {
-    if (!w) return 'Chicago TMY3 Weather';
-    if (w.includes('San_Francisco') || w.includes('San Francisco')) return 'San Francisco TMY3 Weather';
-    return 'Chicago O\'Hare TMY3 Weather';
+    if (!w) return 'Chicago O\'Hare TMY3';
+    if (w.includes('San_Francisco') || w.includes('San.Francisco') || w.includes('San Francisco')) return 'San Francisco Intl AP TMY3';
+    if (w.includes('Sterling') || w.includes('Dulles') || w.includes('Washington') || w.includes('VA')) return 'Washington Dulles Intl AP TMY3';
+    if (w.includes('Chicago') || w.includes('OHare') || w.includes('IL')) return 'Chicago O\'Hare Intl AP TMY3';
+    // Generic: strip path separators and extension
+    return w.replace(/^.*[\/\\]/, '').replace('.epw', '');
   };
 
-  const targetDuration = (activeConfig?.model?.includes('OfficeMedium') || activeConfig?.model?.includes('ASHRAE')) ? 15 : 10;
+
+  // Estimate simulation duration by model complexity (zones × timesteps)
+  const targetDuration = (activeConfig?.model?.includes('Supermarket')) ? 25
+    : (activeConfig?.model?.includes('OfficeMedium') || activeConfig?.model?.includes('ASHRAE')) ? 18
+    : 12;
+
   const progressPct = Math.min(95, Math.round((elapsedSeconds / targetDuration) * 100));
 
   const navItems = [

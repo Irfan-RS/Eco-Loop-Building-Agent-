@@ -214,6 +214,28 @@ def _run_simulation_thread(model_name, weather_name, period):
         _sim_state["running"] = False
 
 
+def _climate_zone_from_lat(lat: float, city: str = "", state: str = "") -> str:
+    """Derive ASHRAE climate zone from EPW LOCATION data (latitude + city/state hints)."""
+    city_l = city.lower()
+    state_l = state.upper()
+    # Known exact overrides
+    if "chicago" in city_l or state_l == "IL": return "Zone 5A (Cold / Hot Summer Swings)"
+    if "san francisco" in city_l or "san.francisco" in city_l: return "Zone 3C (Mild Coastal Mediterranean)"
+    if "denver" in city_l or state_l == "CO": return "Zone 5B (Cold Semi-Arid / High Altitude)"
+    if "dulles" in city_l or "sterling" in city_l or "washington" in city_l or state_l == "VA": return "Zone 4A (Mixed Humid Continental)"
+    if "phoenix" in city_l or state_l == "AZ": return "Zone 2B (Hot Dry Desert)"
+    if "miami" in city_l or state_l == "FL": return "Zone 1A (Hot Humid Tropical)"
+    if "minneapolis" in city_l or "boston" in city_l: return "Zone 6A (Cold / Very Cold)"
+    # Latitude-based fallback
+    abs_lat = abs(lat)
+    if abs_lat >= 50: return "Zone 7/8 (Very Cold / Subarctic)"
+    if abs_lat >= 45: return "Zone 6A (Cold)"
+    if abs_lat >= 40: return "Zone 5A (Cold / Hot Summer)"
+    if abs_lat >= 35: return "Zone 4A (Mixed Humid)"
+    if abs_lat >= 30: return "Zone 3A/3B (Warm Mixed)"
+    if abs_lat >= 25: return "Zone 2A/2B (Hot)"
+    return "Zone 1A (Hot Humid)"
+
 
 def get_location_metadata(weather_name: str = None) -> dict:
     from config.settings import resolve_weather_file
@@ -229,7 +251,7 @@ def get_location_metadata(weather_name: str = None) -> dict:
                 lat = float(parts[6]) if len(parts) > 6 else 0.0
                 lon = float(parts[7]) if len(parts) > 7 else 0.0
                 elev = float(parts[9]) if len(parts) > 9 else 0.0
-                climate = "Zone 5A (Cold / Hot Summer Swings)" if ("Chicago" in city or "IL" in state) else "Zone 3C (Mild Coastal Mediterranean)"
+                climate = _climate_zone_from_lat(lat, city, state)
                 return {
                     "city": city,
                     "state": state,

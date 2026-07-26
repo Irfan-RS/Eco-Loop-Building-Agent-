@@ -19,63 +19,80 @@ import {
   Loader2
 } from 'lucide-react';
 
+// Format raw safe-key zone id (e.g. "core_bottom") into human-readable label
+function formatZoneName(id) {
+  return id
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bZn\b/g, 'Zone')
+    .replace(/\bBot\b/g, 'Bottom');
+}
+
 // ── Zone description heuristics — works for any building zone name ────────────
 function describeZone(id, modelName) {
   const name = id.toLowerCase();
   if (name.includes('plenum')) return 'Return Air Ceiling Plenum';
-  if (name.includes('core')) return 'Core Zone (High Internal Gains)';
-  if (name.includes('attic') || name.includes('roof')) return 'Attic / Roof Zone';
-  if (name.includes('basement') || name.includes('ground')) return 'Basement / Ground Floor';
-  if (name.includes('south') || name.includes('_s_')) return 'South Perimeter (Direct Solar Load)';
-  if (name.includes('north') || name.includes('_n_')) return 'North Perimeter (Shaded Exposure)';
-  if (name.includes('east') || name.includes('_e_')) return 'East Perimeter (Morning Solar)';
-  if (name.includes('west') || name.includes('_w_')) return 'West Perimeter (Evening Solar)';
+  const isTop = name.includes('top');
+  const isMid = name.includes('mid');
+  const isBot = name.includes('bot') || name.includes('bottom') || name.includes('first');
+  const floorLabel = isTop ? 'Top Floor · ' : isMid ? 'Mid Floor · ' : isBot ? 'Bottom Floor · ' : '';
+  if (name.includes('core')) return `${floorLabel}Core Zone (High Internal Gains, VAV System)`;
+  if (name.includes('south') || name.includes('_s_') || name.includes('_3')) return `${floorLabel}South Perimeter (Direct Solar Load)`;
+  if (name.includes('north') || name.includes('_n_') || name.includes('_1')) return `${floorLabel}North Perimeter (Shaded Exposure)`;
+  if (name.includes('east')  || name.includes('_e_') || name.includes('_2')) return `${floorLabel}East Perimeter (Morning Solar)`;
+  if (name.includes('west')  || name.includes('_w_') || name.includes('_4')) return `${floorLabel}West Perimeter (Evening Solar)`;
+  if (name.includes('sales') || name.includes('salesfloor')) return 'Sales Floor (Refrigeration + HVAC Load)';
+  if (name.includes('backroom') || name.includes('back')) return 'Back Room (Storage + Equipment Load)';
   if (name.includes('space1') || name.match(/zone[\s_-]?1$/)) return 'Perimeter South (Direct Solar Load)';
-  if (name.includes('space2') || name.match(/zone[\s_-]?2$/)) return 'Core Zone (High Internal Gains)';
+  if (name.includes('space2') || name.match(/zone[\s_-]?2$/)) return 'Perimeter East (Morning Solar)';
   if (name.includes('space3') || name.match(/zone[\s_-]?3$/)) return 'Perimeter North (Shaded Zone)';
-  if (name.includes('space4') || name.match(/zone[\s_-]?4$/)) return 'Perimeter East (Morning Solar)';
-  if (name.includes('space5') || name.match(/zone[\s_-]?5$/)) return 'Perimeter West (Evening Solar)';
+  if (name.includes('space4') || name.match(/zone[\s_-]?4$/)) return 'Perimeter West (Evening Solar)';
+  if (name.includes('space5') || name.match(/zone[\s_-]?5$/)) return 'Central Core Zone';
   if (name.includes('corridor') || name.includes('hall')) return 'Corridor / Hallway';
-  if (name.includes('stair')) return 'Stairwell Zone';
   if (name.includes('mech') || name.includes('utility')) return 'Mechanical / Utility Room';
-  if (name.includes('office')) return 'Open Office Area';
-  if (name.includes('conf') || name.includes('meeting')) return 'Conference Room';
-  return `Thermal Zone (${id})`;
+  return `Thermal Zone — ${formatZoneName(id)}`;
 }
+
 
 export default function ZoneAnalytics({ baselineData = [], aiData = [], modelName = '5ZoneAirCooled.idf', summary = null, modelInfo = null }) {
 
   // ── Derive zone list from actual CSV columns (ground truth from simulation) ──
   // Priority: 1) temp_* column names in CSV  2) modelInfo.zones  3) hardcoded fallback
   const zonesList = useMemo(() => {
-    // Source 1: CSV data — extract zone names from temp_* columns
+    // Source 1: CSV data — extract zone names from temp_* columns (safe-key format)
     const sourceData = (baselineData && baselineData.length > 0) ? baselineData : (aiData && aiData.length > 0 ? aiData : []);
     if (sourceData.length > 0) {
       const firstRow = sourceData[0];
       const zoneIds = Object.keys(firstRow)
         .filter(k => k.startsWith('temp_'))
         .map(k => k.replace('temp_', ''))
+        .filter(k => k.length > 0)
         .sort();
       if (zoneIds.length > 0) {
-        return zoneIds.map(id => ({ id, label: id, desc: describeZone(id, modelName) }));
+        return zoneIds.map(id => ({ id, label: formatZoneName(id), desc: describeZone(id, modelName) }));
       }
     }
 
-    // Source 2: modelInfo from /api/building-model
+    // Source 2: modelInfo from /api/building-model — convert to safe-key format
     if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
-      return modelInfo.zones.map(id => ({ id, label: id, desc: describeZone(id, modelName) }));
+      return modelInfo.zones
+        .filter(z => !z.toLowerCase().includes('plenum'))
+        .map(z => {
+          const id = z.replace(/ /g, '_').replace(/-/g, '_').toLowerCase();
+          return { id, label: formatZoneName(id), desc: describeZone(id, modelName) };
+        });
     }
 
-    // Source 3: hardcoded fallback (5ZoneAirCooled)
+    // Source 3: hardcoded fallback (5ZoneAirCooled safe-key format)
     return [
-      { id: 'SPACE1-1', label: 'SPACE1-1', desc: 'Perimeter South (Direct Solar Load)' },
-      { id: 'SPACE2-1', label: 'SPACE2-1', desc: 'Core Zone (High Internal Gains)' },
-      { id: 'SPACE3-1', label: 'SPACE3-1', desc: 'Perimeter North (Shaded Zone)' },
-      { id: 'SPACE4-1', label: 'SPACE4-1', desc: 'Perimeter East (Morning Solar)' },
-      { id: 'SPACE5-1', label: 'SPACE5-1', desc: 'Perimeter West (Evening Solar)' },
-      { id: 'PLENUM-1', label: 'PLENUM-1', desc: 'Return Air Ceiling Plenum' },
+      { id: 'space1_1', label: 'Space1 1', desc: 'Perimeter South (Direct Solar Load)' },
+      { id: 'space2_1', label: 'Space2 1', desc: 'Perimeter East (Morning Solar)' },
+      { id: 'space3_1', label: 'Space3 1', desc: 'Perimeter North (Shaded Zone)' },
+      { id: 'space4_1', label: 'Space4 1', desc: 'Perimeter West (Evening Solar)' },
+      { id: 'space5_1', label: 'Space5 1', desc: 'Central Core Zone' },
     ];
   }, [baselineData, aiData, modelInfo, modelName]);
+
 
   // Reset selected zone when building changes (zone list changes)
   const [selectedZone, setSelectedZone] = useState(() => zonesList[0]?.id || '');
