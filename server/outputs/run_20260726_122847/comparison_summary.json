@@ -1,0 +1,29 @@
+{
+  "timestamp": "20260726_122847",
+  "run_folder": "run_20260726_122847",
+  "baseline": {
+    "mode": "Baseline",
+    "total_kwh": 2660.65,
+    "peak_demand_kw": 43.27,
+    "comfort_violation_minutes": 0,
+    "comfort_compliance_pct": 100.0,
+    "co2_emissions_kg": 1117.47,
+    "total_timesteps": 576
+  },
+  "ai_controlled": {
+    "mode": "AI-Controlled",
+    "total_kwh": 2062.48,
+    "peak_demand_kw": 22.96,
+    "comfort_violation_minutes": 4320,
+    "comfort_compliance_pct": 0.0,
+    "co2_emissions_kg": 866.24,
+    "total_timesteps": 576
+  },
+  "summary": {
+    "total_kwh_saved": 598.17,
+    "energy_reduction_pct": 22.5,
+    "peak_kw_reduction": 20.31,
+    "peak_reduction_pct": 46.9,
+    "co2_emissions_saved_kg": 251.23
+  }
+}

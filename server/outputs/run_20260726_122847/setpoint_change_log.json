@@ -1,0 +1,11 @@
+[
+  {
+    "timestamp": "Day 07 00:15",
+    "zone": "All Thermal Zones",
+    "old_cooling_setpoint": 23.0,
+    "new_cooling_setpoint": 27.0,
+    "old_heating_setpoint": 20.0,
+    "new_heating_setpoint": 17.0,
+    "reasoning": "Closed-loop setpoint update (AI-Controlled)"
+  }
+]
