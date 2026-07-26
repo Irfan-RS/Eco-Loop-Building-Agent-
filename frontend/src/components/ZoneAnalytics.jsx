@@ -15,8 +15,8 @@ import {
   Clock, 
   Leaf, 
   Layers,
-  TrendingDown,
-  Award
+  Award,
+  Loader2
 } from 'lucide-react';
 
 export default function ZoneAnalytics({ baselineData = [], aiData = [], modelName = '5ZoneAirCooled.idf', summary = null }) {
@@ -36,50 +36,26 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
   // Helper to safely format numbers
   const fmt = (val, d = 2) => (val !== undefined && val !== null ? Number(val).toFixed(d) : '0.00');
 
-  // Extract total energy consumption metrics (Terminal Deliverable Metrics)
-  const baseKwh = summary?.baseline_kwh || (baselineData.length > 0 ? baselineData[baselineData.length - 1].cumulative_kwh : 2660.65);
-  const aiKwh = summary?.ai_controlled_kwh || (aiData.length > 0 ? aiData[aiData.length - 1].cumulative_kwh : 2062.48);
-  const kwhSaved = summary?.kwh_saved || (baseKwh - aiKwh);
-  const pctSaved = summary?.energy_savings_pct || ((kwhSaved / (baseKwh || 1)) * 100);
+  // Extract total energy consumption metrics (Terminal Deliverable Metrics) directly from summary or real CSV series
+  const hasData = (baselineData && baselineData.length > 0) || (aiData && aiData.length > 0) || summary;
 
-  const basePeakKw = summary?.baseline_peak_kw || (baselineData.length > 0 ? Math.max(...baselineData.map(d => d.electric_power_kw || 0)) : 43.27);
-  const aiPeakKw = summary?.ai_peak_kw || (aiData.length > 0 ? Math.max(...aiData.map(d => d.electric_power_kw || 0)) : 22.96);
-  const peakCutKw = summary?.peak_kw_reduction || (basePeakKw - aiPeakKw);
-  const peakPctCut = summary?.peak_pct_cut || ((peakCutKw / (basePeakKw || 1)) * 100);
+  const baseKwh = summary?.baseline_kwh ?? (baselineData.length > 0 ? baselineData[baselineData.length - 1].cumulative_kwh : 0.0);
+  const aiKwh = summary?.ai_controlled_kwh ?? (aiData.length > 0 ? aiData[aiData.length - 1].cumulative_kwh : 0.0);
+  const kwhSaved = summary?.kwh_saved ?? (baseKwh - aiKwh);
+  const pctSaved = summary?.energy_savings_pct ?? ((baseKwh > 0) ? ((kwhSaved / baseKwh) * 100) : 0.0);
 
-  const co2SavedKg = summary?.co2_saved_kg || (kwhSaved * 0.42);
-  const comfortCompliance = summary?.comfort_compliance_pct || 100.0;
+  const basePeakKw = summary?.baseline_peak_kw ?? (baselineData.length > 0 ? Math.max(...baselineData.map(d => d.electric_power_kw || 0)) : 0.0);
+  const aiPeakKw = summary?.ai_peak_kw ?? (aiData.length > 0 ? Math.max(...aiData.map(d => d.electric_power_kw || 0)) : 0.0);
+  const peakCutKw = summary?.peak_kw_reduction ?? (basePeakKw - aiPeakKw);
+  const peakPctCut = summary?.peak_pct_cut ?? ((basePeakKw > 0) ? ((peakCutKw / basePeakKw) * 100) : 0.0);
 
-  const zoneProfiles = {
-    'SPACE1-1': { tempOff: 0.6, humOff: -1.8, pmvOff: 0.08, pwrShare: 0.25, occShare: 0.28 },
-    'SPACE2-1': { tempOff: 0.4, humOff: 0.0, pmvOff: 0.02, pwrShare: 0.30, occShare: 0.40 },
-    'SPACE3-1': { tempOff: -0.5, humOff: 1.8, pmvOff: -0.12, pwrShare: 0.18, occShare: 0.15 },
-    'SPACE4-1': { tempOff: 0.3, humOff: -1.0, pmvOff: 0.01, pwrShare: 0.12, occShare: 0.10 },
-    'SPACE5-1': { tempOff: 0.7, humOff: -2.5, pmvOff: 0.14, pwrShare: 0.11, occShare: 0.07 },
-    'PLENUM-1': { tempOff: 2.2, humOff: -6.5, pmvOff: 0.85, pwrShare: 0.04, occShare: 0.0 },
-  };
+  const co2SavedKg = summary?.co2_saved_kg ?? (kwhSaved * 0.42);
+  const comfortCompliance = summary?.comfort_compliance_pct ?? 100.0;
 
-  // Extract live zone-specific telemetry values from latest records
+  // Extract live zone-specific telemetry values directly from real calculation records
   const getZoneMetrics = (dataList, isAi = false) => {
-    const zp = zoneProfiles[selectedZone] || zoneProfiles['SPACE1-1'];
-
     if (!dataList || dataList.length === 0) {
-      const baseTemp = isAi ? 23.4 : 22.8;
-      const baseHum = 45.0;
-      const basePmv = isAi ? 0.10 : 0.65;
-      const basePwr = isAi ? 11.2 : 14.8;
-      const baseK = isAi ? aiKwh : baseKwh;
-
-      return {
-        temp: baseTemp + zp.tempOff,
-        humidity: baseHum + zp.humOff,
-        pmv: basePmv + zp.pmvOff,
-        occ: Math.round(45 * zp.occShare),
-        power: basePwr * zp.pwrShare,
-        clg: isAi ? 24.5 : 23.0,
-        htg: isAi ? 20.5 : 20.0,
-        kwh: baseK * zp.pwrShare
-      };
+      return { temp: 0.0, humidity: 0.0, pmv: 0.0, occ: 0, power: 0.0, clg: isAi ? 24.5 : 23.0, htg: isAi ? 20.5 : 20.0, kwh: 0.0 };
     }
     const last = dataList[dataList.length - 1];
     
@@ -90,32 +66,37 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
     const kwhKey = `kwh_${selectedZone}`;
     const occKey = `occ_${selectedZone}`;
 
-    const rawTemp = last.avg_indoor_temp !== undefined ? last.avg_indoor_temp : (isAi ? 23.4 : 22.8);
-    const rawHum = last.humidity !== undefined ? last.humidity : 45.0;
-    const rawPmv = last.avg_pmv !== undefined ? last.avg_pmv : (isAi ? 0.10 : 0.65);
-    const rawPwr = last.electric_power_kw !== undefined ? last.electric_power_kw : (isAi ? 11.2 : 14.8);
-    const rawKwh = last.cumulative_kwh !== undefined ? last.cumulative_kwh : (isAi ? aiKwh : baseKwh);
-    const rawOcc = last.total_occupancy !== undefined ? last.total_occupancy : 45;
+    const temp = last[tempKey] ?? last.avg_indoor_temp ?? 0.0;
+    const humidity = last[humKey] ?? last.humidity ?? 0.0;
+    const pmv = last[pmvKey] ?? last.avg_pmv ?? 0.0;
+    const power = last[pwrKey] ?? last.electric_power_kw ?? 0.0;
+    const kwh = last[kwhKey] ?? last.cumulative_kwh ?? 0.0;
+    const occ = last[occKey] ?? last.total_occupancy ?? 0;
 
-    const temp = last[tempKey] !== undefined ? last[tempKey] : (rawTemp + zp.tempOff);
-    const humidity = last[humKey] !== undefined ? last[humKey] : (rawHum + zp.humOff);
-    const pmv = last[pmvKey] !== undefined ? last[pmvKey] : (rawPmv + zp.pmvOff);
-    const power = last[pwrKey] !== undefined ? last[pwrKey] : (rawPwr * zp.pwrShare);
-    const kwh = last[kwhKey] !== undefined ? last[kwhKey] : (rawKwh * zp.pwrShare);
-    const occ = last[occKey] !== undefined ? last[occKey] : Math.round(rawOcc * zp.occShare);
-
-    const clg = last.cooling_setpoint || (isAi ? 24.5 : 23.0);
-    const htg = last.heating_setpoint || (isAi ? 20.5 : 20.0);
+    const clg = last.cooling_setpoint ?? (isAi ? 24.5 : 23.0);
+    const htg = last.heating_setpoint ?? (isAi ? 20.5 : 20.0);
 
     return { temp, humidity, pmv, occ, power, clg, htg, kwh };
   };
-
-
 
   const baseMetrics = getZoneMetrics(baselineData, false);
   const aiMetrics = getZoneMetrics(aiData, true);
 
   const pmvCompliant = Math.abs(aiMetrics.pmv) <= 0.5;
+
+  if (!hasData) {
+    return (
+      <div style={{ marginTop: '24px', textAlign: 'center', padding: '60px 20px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+        <Loader2 size={42} color="#10B981" style={{ animation: 'spin 1.5s linear infinite', marginBottom: '16px' }} />
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '8px' }}>
+          No Physics Simulation Metrics Loaded
+        </h3>
+        <p style={{ fontSize: '0.92rem', color: '#94A3B8', maxWidth: '500px', margin: '0 auto 20px auto' }}>
+          Click the <strong style={{ color: '#10B981' }}>"Calculate"</strong> button in the top control panel to trigger live PyEnergyPlus physics execution and Ollama LLM agent setpoint optimization.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginTop: '24px' }}>
@@ -136,20 +117,20 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span className="badge badge-success" style={{ fontWeight: 800, fontSize: '0.82rem' }}>
-                <Award size={15} /> Terminal Verification Deliverable
+                <Award size={15} /> EnergyPlus Physics + Ollama Verification
               </span>
               <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 600 }}>
-                Building: <strong style={{ color: '#F8FAFC' }}>{modelName}</strong>
+                Building Model: <strong style={{ color: '#F8FAFC' }}>{modelName}</strong>
               </span>
             </div>
             <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#F8FAFC', margin: '8px 0 0 0', letterSpacing: '-0.4px' }}>
-              Energy Consumption & Comfort Metrics: Without AI vs. With AI
+              Calculated Energy Consumption: Without AI vs. With AI
             </h2>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(16, 185, 129, 0.15)', padding: '8px 16px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34D399', fontSize: '0.88rem', fontWeight: 800 }}>
             <Radio size={16} style={{ animation: 'pulse 1.5s infinite' }} />
-            Physical AI Closed-Loop Verified
+            Calculated Live Telemetry
           </div>
         </div>
 
@@ -281,12 +262,10 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
         </div>
       </div>
 
-      {/* REORGANIZED PHYSICAL METRIC CARDS (NO STEP HEADINGS) */}
+      {/* REORGANIZED PHYSICAL METRIC CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(540px, 1fr))', gap: '20px' }}>
 
-        {/* ==================================================================== */}
         {/* SECTION 1: THERMAL COMFORT & AIR QUALITY (ASHRAE 55 PMV) */}
-        {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -315,7 +294,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span><Activity size={14} /> PMV Index:</span>
-                  <strong style={{ color: '#EF4444' }}>+{fmt(baseMetrics.pmv, 2)} (Warm)</strong>
+                  <strong style={{ color: '#EF4444' }}>{baseMetrics.pmv >= 0 ? `+${fmt(baseMetrics.pmv, 2)}` : fmt(baseMetrics.pmv, 2)}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span><Users size={14} /> Occupancy:</span>
@@ -340,7 +319,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span><Activity size={14} /> PMV Index:</span>
-                  <strong style={{ color: '#34D399' }}>+{fmt(aiMetrics.pmv, 2)} (Optimal)</strong>
+                  <strong style={{ color: '#34D399' }}>{aiMetrics.pmv >= 0 ? `+${fmt(aiMetrics.pmv, 2)}` : fmt(aiMetrics.pmv, 2)}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span><Users size={14} /> Occupancy:</span>
@@ -351,9 +330,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           </div>
         </div>
 
-        {/* ==================================================================== */}
         {/* SECTION 2: ELECTRICITY POWER DEMAND & PEAK THROTTLING */}
-        {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -381,9 +358,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           </div>
         </div>
 
-        {/* ==================================================================== */}
         {/* SECTION 3: GRID CARBON INTENSITY & EMISSIONS */}
-        {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -410,9 +385,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           </p>
         </div>
 
-        {/* ==================================================================== */}
         {/* SECTION 4: THERMOSTAT SETPOINTS & ACTUATOR MEMORY INJECTION */}
-        {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
