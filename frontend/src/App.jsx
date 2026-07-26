@@ -108,29 +108,30 @@ export default function App() {
     try {
       setIsSimulating(true);
       setLoading(true);
-      setMetrics(null);
-      if (config.model || config.weather) {
-        setActiveConfig(prev => ({ ...prev, ...config }));
-      }
-      setCurrentPage('analytics'); // Direct user to analytics page
+      setMetrics(null);    // 1. Instantly clear old metrics
+      setModelInfo(null);  // 2. Instantly clear old model info
+
+      const newConfig = { ...activeConfig, ...config };
+      setActiveConfig(newConfig);
+      setCurrentPage('analytics'); // Direct user to analytics view
+
       const res = await fetch(`${API_BASE}/api/run-simulation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify(newConfig)
       });
       const data = await res.json();
-      if (data.status === 'success') {
-        if (data.active_config) {
-          setActiveConfig(data.active_config);
-        }
+      if (data.status === 'success' && data.active_config) {
+        setActiveConfig(data.active_config);
       }
     } catch (err) {
       console.error('Simulation trigger error:', err);
     } finally {
       setIsSimulating(false);
-      await fetchData();
+      await fetchData(); // 3. Directly render newly calculated metrics!
     }
   };
+
 
   const navigateToHome = () => {
     setIsSimulating(false);
