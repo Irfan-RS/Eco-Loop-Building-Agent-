@@ -59,9 +59,11 @@ export default function App() {
     };
   });
 
-  const API_BASE = typeof window !== 'undefined' && window.location.origin.includes(':5173')
-    ? 'http://localhost:8000'
-    : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
+  const API_BASE = import.meta.env.VITE_API_BASE_URL ||
+    (typeof window !== 'undefined' && (window.location.origin.includes(':5173') || window.location.origin.includes(':4173') || window.location.origin.includes('localhost'))
+      ? 'http://localhost:8000'
+      : 'https://ecoloop-building-agent.onrender.com');
+
 
 
   useEffect(() => {
