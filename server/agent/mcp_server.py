@@ -241,8 +241,9 @@ class MCPServer:
         filename = (args or {}).get("log_filename", "eplusout.err")
         err_file = OUTPUT_DIR / filename
         if not err_file.exists():
-            sub_errs = list(OUTPUT_DIR.glob("run_*/eplusout.err")) + list((BASE_DIR / "outputs").glob("run_*/energyplus_raw/eplusout.err"))
+            sub_errs = list(OUTPUT_DIR.glob("run_*/eplusout.err")) + list((OUTPUT_DIR.parent.parent / "outputs").glob("run_*/energyplus_raw/eplusout.err"))
             if sub_errs:
+
                 err_file = sorted(sub_errs, key=lambda p: p.stat().st_mtime, reverse=True)[0]
             else:
                 return {
