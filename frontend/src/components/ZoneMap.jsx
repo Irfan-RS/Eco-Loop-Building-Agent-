@@ -2,38 +2,27 @@ import React, { useState, useMemo } from 'react';
 import { Layers, Thermometer, ShieldCheck, Zap, Activity, Info, Compass, Play, Loader2 } from 'lucide-react';
 
 // Format a raw safe key (e.g. "core_bottom", "perimeter_top_zn_3") into a display label
+// Format a raw safe key (e.g. "space1_1", "plenum_1") into display labels matching IDF names
 function formatZoneName(id) {
-  return id
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .replace(/\bZn\b/g, 'Zone')
-    .replace(/\bBot\b/g, 'Bottom');
+  const name = id.toLowerCase();
+  if (name.includes('plenum')) return 'PLENUM-1';
+  if (name.includes('space1')) return 'SPACE1-1';
+  if (name.includes('space2')) return 'SPACE2-1';
+  if (name.includes('space3')) return 'SPACE3-1';
+  if (name.includes('space4')) return 'SPACE4-1';
+  if (name.includes('space5')) return 'SPACE5-1';
+  return id.toUpperCase().replace(/_/g, '-');
 }
 
 function describeZone(id) {
   const name = id.toLowerCase();
-  if (name.includes('plenum')) return 'Return Air Ceiling Plenum — unconditioned';
-  // Floor/level identifiers
-  const isTop = name.includes('top');
-  const isMid = name.includes('mid');
-  const isBot = name.includes('bot') || name.includes('bottom') || name.includes('first') || name.includes('floor');
-  const floorLabel = isTop ? 'Top Floor · ' : isMid ? 'Mid Floor · ' : isBot ? 'Bottom Floor · ' : '';
-  // Orientation
-  if (name.includes('core')) return `${floorLabel}Core Zone (High Internal Gains, VAV System)`;
-  if (name.includes('south') || name.includes('_3')) return `${floorLabel}South Perimeter (Direct Solar Load)`;
-  if (name.includes('north') || name.includes('_1')) return `${floorLabel}North Perimeter (Shaded Boundary)`;
-  if (name.includes('east')  || name.includes('_2')) return `${floorLabel}East Perimeter (Morning Solar Gain)`;
-  if (name.includes('west')  || name.includes('_4')) return `${floorLabel}West Perimeter (Evening Solar Gain)`;
-  // Supermarket
-  if (name.includes('sales') || name.includes('salesfloor')) return 'Sales Floor (Refrigeration + HVAC Load)';
-  if (name.includes('backroom') || name.includes('back')) return 'Back Room (Storage + Equipment Load)';
-  // 5ZoneAirCooled
+  if (name.includes('plenum')) return 'Return Air Ceiling Plenum';
   if (name.includes('space1')) return 'Perimeter South (Direct Solar Load)';
   if (name.includes('space2')) return 'Perimeter East (Morning Solar Gain)';
   if (name.includes('space3')) return 'Perimeter North (Shaded Exposure)';
   if (name.includes('space4')) return 'Perimeter West (Evening Solar Gain)';
   if (name.includes('space5')) return 'Central Core Zone';
-  return `Thermal Zone — ${formatZoneName(id)}`;
+  return `Thermal Zone (${formatZoneName(id)})`;
 }
 
 
@@ -69,12 +58,11 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
     // No CSV data yet — use modelInfo.zones (original IDF names), converted to safe keys
     if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
       return modelInfo.zones
-        .filter(z => !z.toLowerCase().includes('plenum'))
         .map(z => z.replace(/ /g, '_').replace(/-/g, '_').toLowerCase());
     }
 
     // Last resort: 5-zone defaults
-    return ['space1_1', 'space2_1', 'space3_1', 'space4_1', 'space5_1'];
+    return ['plenum_1', 'space1_1', 'space2_1', 'space3_1', 'space4_1', 'space5_1'];
   }, [aiData, baselineData, telemetryData, modelInfo]);
 
 

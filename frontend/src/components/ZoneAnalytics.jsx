@@ -19,13 +19,16 @@ import {
   Loader2
 } from 'lucide-react';
 
-// Format raw safe-key zone id (e.g. "core_bottom") into human-readable label
+// Format raw safe-key zone id (e.g. "space1_1", "plenum_1") into display labels matching IDF names
 function formatZoneName(id) {
-  return id
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .replace(/\bZn\b/g, 'Zone')
-    .replace(/\bBot\b/g, 'Bottom');
+  const name = id.toLowerCase();
+  if (name.includes('plenum')) return 'PLENUM-1';
+  if (name.includes('space1')) return 'SPACE1-1';
+  if (name.includes('space2')) return 'SPACE2-1';
+  if (name.includes('space3')) return 'SPACE3-1';
+  if (name.includes('space4')) return 'SPACE4-1';
+  if (name.includes('space5')) return 'SPACE5-1';
+  return id.toUpperCase().replace(/_/g, '-');
 }
 
 // ── Zone description heuristics — works for any building zone name ────────────
@@ -76,7 +79,6 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
     // Source 2: modelInfo from /api/building-model — convert to safe-key format
     if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
       return modelInfo.zones
-        .filter(z => !z.toLowerCase().includes('plenum'))
         .map(z => {
           const id = z.replace(/ /g, '_').replace(/-/g, '_').toLowerCase();
           return { id, label: formatZoneName(id), desc: describeZone(id, modelName) };
@@ -85,11 +87,12 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
 
     // Source 3: hardcoded fallback (5ZoneAirCooled safe-key format)
     return [
-      { id: 'space1_1', label: 'Space1 1', desc: 'Perimeter South (Direct Solar Load)' },
-      { id: 'space2_1', label: 'Space2 1', desc: 'Perimeter East (Morning Solar)' },
-      { id: 'space3_1', label: 'Space3 1', desc: 'Perimeter North (Shaded Zone)' },
-      { id: 'space4_1', label: 'Space4 1', desc: 'Perimeter West (Evening Solar)' },
-      { id: 'space5_1', label: 'Space5 1', desc: 'Central Core Zone' },
+      { id: 'plenum_1', label: 'PLENUM-1', desc: 'Return Air Ceiling Plenum' },
+      { id: 'space1_1', label: 'SPACE1-1', desc: 'Perimeter South (Direct Solar Load)' },
+      { id: 'space2_1', label: 'SPACE2-1', desc: 'Perimeter East (Morning Solar)' },
+      { id: 'space3_1', label: 'SPACE3-1', desc: 'Perimeter North (Shaded Zone)' },
+      { id: 'space4_1', label: 'SPACE4-1', desc: 'Perimeter West (Evening Solar)' },
+      { id: 'space5_1', label: 'SPACE5-1', desc: 'Central Core Zone' },
     ];
   }, [baselineData, aiData, modelInfo, modelName]);
 

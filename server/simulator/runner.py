@@ -382,15 +382,11 @@ def generate_cloud_fallback_metrics(outputs_folder: Path, mode: str, model_name:
     try:
         from simulator.discovery import BuildingDiscovery
         bd = BuildingDiscovery(model_name)
-        raw_zones = bd.get_zones()
-        # Filter out plenum zones (non-occupied) for occupancy / comfort metrics
-        zones = [z for z in raw_zones if "plenum" not in z.lower()]
-        if not zones:
-            zones = raw_zones
+        zones = bd.get_zones()
     except Exception:
         pass
     if not zones:
-        zones = ["Core", "North", "East", "South", "West"]
+        zones = ["PLENUM-1", "SPACE1-1", "SPACE2-1", "SPACE3-1", "SPACE4-1", "SPACE5-1"]
 
     n_zones = len(zones)
 
