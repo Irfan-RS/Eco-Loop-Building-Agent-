@@ -2,20 +2,27 @@ import React, { useState, useMemo } from 'react';
 import { Layers, Thermometer, ShieldCheck, Zap, Activity, Info, Compass, Play, Loader2 } from 'lucide-react';
 
 function describeZone(id) {
-  const name = id.toLowerCase();
+  const name = String(id || '').toLowerCase();
+  if (name.includes('bottom_south')) return 'Bottom Floor South Exposure (Solar Heat)';
+  if (name.includes('bottom_north')) return 'Bottom Floor North Exposure (Shaded)';
+  if (name.includes('bottom')) return 'Bottom Floor Core HVAC Zone';
+  if (name.includes('mid_south')) return 'Mid Floor South Exposure (High Solar)';
+  if (name.includes('mid_north')) return 'Mid Floor North Boundary';
+  if (name.includes('mid')) return 'Middle Floor Core HVAC Zone';
+  if (name.includes('top_south')) return 'Top Floor South Roof Exposure';
+  if (name.includes('top_north')) return 'Top Floor North Exposure';
+  if (name.includes('top')) return 'Top Floor Core Zone';
+  if (name.includes('sales')) return 'Main Sales Floor & Retail Display';
+  if (name.includes('produce')) return 'Fresh Produce Cooling Zone';
+  if (name.includes('deli')) return 'Deli & Food Service Counter';
+  if (name.includes('storage')) return 'Dry Goods & Storage Warehouse';
+  if (name.includes('bakery')) return 'Bakery High Heat Internal Load';
   if (name.includes('plenum')) return 'Return Air Ceiling Plenum';
   if (name.includes('core')) return 'Core Zone (High Internal Gains)';
-  if (name.includes('attic') || name.includes('roof')) return 'Attic / Roof Zone';
-  if (name.includes('basement') || name.includes('ground')) return 'Basement / Ground Floor';
-  if (name.includes('south') || name.includes('_s_') || name.includes('_3')) return 'South Exposure (Direct Solar Load)';
-  if (name.includes('north') || name.includes('_n_') || name.includes('_1')) return 'North Exposure (Shaded Boundary)';
-  if (name.includes('east') || name.includes('_e_') || name.includes('_2')) return 'East Exposure (Morning Solar)';
-  if (name.includes('west') || name.includes('_w_') || name.includes('_4')) return 'West Exposure (Evening Solar)';
-  if (name.includes('space1')) return 'Perimeter South (Direct Solar Load)';
-  if (name.includes('space2')) return 'Core Zone (High Internal Gains)';
-  if (name.includes('space3')) return 'Perimeter North (Shaded Exposure)';
-  if (name.includes('space4')) return 'Perimeter East (Morning Solar)';
-  if (name.includes('space5')) return 'Perimeter West (Evening Solar)';
+  if (name.includes('south') || name.includes('space1')) return 'Perimeter South (Solar Load)';
+  if (name.includes('north') || name.includes('space3')) return 'Perimeter North (Shaded Boundary)';
+  if (name.includes('east') || name.includes('space4')) return 'Perimeter East (Morning Sun)';
+  if (name.includes('west') || name.includes('space5')) return 'Perimeter West (Evening Sun)';
   return `Thermal Zone (${id})`;
 }
 
@@ -26,6 +33,7 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
   const [saveStatus, setSaveStatus] = useState(null);
 
   const isMediumOffice = (modelName || '').includes('OfficeMedium') || (modelName || '').includes('ASHRAE');
+  const isSupermarket = (modelName || '').includes('Supermarket');
   const hasTelemetry = (telemetryData && telemetryData.length > 0) || (aiData && aiData.length > 0);
 
   // Extract latest real telemetry records
@@ -44,8 +52,15 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
     if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
       return modelInfo.zones;
     }
-    return ['SPACE1-1', 'SPACE2-1', 'SPACE3-1', 'SPACE4-1', 'SPACE5-1', 'PLENUM-1'];
-  }, [aiData, baselineData, telemetryData, modelInfo]);
+    if (isMediumOffice) {
+      return ['bottom_core', 'bottom_south', 'bottom_north', 'mid_core', 'mid_south', 'mid_north', 'top_core', 'top_south', 'top_north'];
+    }
+    if (isSupermarket) {
+      return ['sales', 'produce', 'deli', 'storage', 'office', 'bakery'];
+    }
+    return ['core', 'north', 'east', 'south', 'west', 'plenum'];
+  }, [aiData, baselineData, telemetryData, modelInfo, isMediumOffice, isSupermarket]);
+
 
   // Default active selectedZoneId
   const activeZoneId = selectedZoneId && allZoneIds.includes(selectedZoneId) ? selectedZoneId : allZoneIds[0];

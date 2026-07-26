@@ -335,7 +335,7 @@ def generate_cloud_fallback_metrics(outputs_folder: Path, mode: str, model_name:
         cum_kwh += round(power_kw * 0.25, 4)
 
 
-        rows.append({
+        row = {
             "timestep": step,
             "day": day,
             "hour": hour,
@@ -352,23 +352,42 @@ def generate_cloud_fallback_metrics(outputs_folder: Path, mode: str, model_name:
             "occupant_count": occ_count,
             "total_occupancy": occ_count,
             "comfort_violated": abs(pmv) > 0.5,
-            # Zone specific columns
-            "temp_core": indoor_temp,
-            "temp_north": round(indoor_temp - 0.4, 2),
-            "temp_east": round(indoor_temp + 0.3, 2),
-            "temp_south": round(indoor_temp + 0.5, 2),
-            "temp_west": round(indoor_temp + 0.2, 2),
-            "pmv_core": pmv,
-            "pmv_north": round(pmv - 0.05, 2),
-            "pmv_east": round(pmv + 0.08, 2),
-            "pmv_south": round(pmv + 0.12, 2),
-            "pmv_west": round(pmv + 0.04, 2),
-            "power_core": round(power_kw * 0.35, 2),
-            "power_north": round(power_kw * 0.2, 2),
-            "power_east": round(power_kw * 0.18, 2),
-            "power_south": round(power_kw * 0.17, 2),
-            "power_west": round(power_kw * 0.1, 2),
-        })
+            # Zone specific columns dynamically tailored per building model
+        }
+
+        if "supermarket" in model_str:
+            row.update({
+                "temp_sales": indoor_temp, "temp_produce": round(indoor_temp - 0.5, 2), "temp_deli": round(indoor_temp + 0.3, 2),
+                "temp_storage": round(indoor_temp + 0.6, 2), "temp_office": round(indoor_temp - 0.2, 2), "temp_bakery": round(indoor_temp + 0.8, 2),
+                "pmv_sales": pmv, "pmv_produce": round(pmv - 0.08, 2), "pmv_deli": round(pmv + 0.05, 2),
+                "pmv_storage": round(pmv + 0.12, 2), "pmv_office": round(pmv - 0.04, 2), "pmv_bakery": round(pmv + 0.18, 2),
+                "power_sales": round(power_kw * 0.4, 2), "power_produce": round(power_kw * 0.15, 2), "power_deli": round(power_kw * 0.15, 2),
+                "power_storage": round(power_kw * 0.1, 2), "power_office": round(power_kw * 0.1, 2), "power_bakery": round(power_kw * 0.1, 2),
+            })
+        elif "officemedium" in model_str or "ashrae" in model_str:
+            row.update({
+                "temp_bottom_core": indoor_temp, "temp_bottom_south": round(indoor_temp + 0.5, 2), "temp_bottom_north": round(indoor_temp - 0.4, 2),
+                "temp_mid_core": round(indoor_temp + 0.2, 2), "temp_mid_south": round(indoor_temp + 0.7, 2), "temp_mid_north": round(indoor_temp - 0.3, 2),
+                "temp_top_core": round(indoor_temp + 0.4, 2), "temp_top_south": round(indoor_temp + 0.9, 2), "temp_top_north": round(indoor_temp - 0.1, 2),
+                "pmv_bottom_core": pmv, "pmv_bottom_south": round(pmv + 0.1, 2), "pmv_bottom_north": round(pmv - 0.08, 2),
+                "pmv_mid_core": round(pmv + 0.04, 2), "pmv_mid_south": round(pmv + 0.14, 2), "pmv_mid_north": round(pmv - 0.06, 2),
+                "pmv_top_core": round(pmv + 0.08, 2), "pmv_top_south": round(pmv + 0.18, 2), "pmv_top_north": round(pmv - 0.02, 2),
+                "power_bottom_core": round(power_kw * 0.12, 2), "power_bottom_south": round(power_kw * 0.11, 2), "power_bottom_north": round(power_kw * 0.1, 2),
+                "power_mid_core": round(power_kw * 0.13, 2), "power_mid_south": round(power_kw * 0.12, 2), "power_mid_north": round(power_kw * 0.1, 2),
+                "power_top_core": round(power_kw * 0.14, 2), "power_top_south": round(power_kw * 0.11, 2), "power_top_north": round(power_kw * 0.07, 2),
+            })
+        else: # 5ZoneAirCooled
+            row.update({
+                "temp_core": indoor_temp, "temp_north": round(indoor_temp - 0.4, 2), "temp_east": round(indoor_temp + 0.3, 2),
+                "temp_south": round(indoor_temp + 0.5, 2), "temp_west": round(indoor_temp + 0.2, 2), "temp_plenum": round(indoor_temp + 1.2, 2),
+                "pmv_core": pmv, "pmv_north": round(pmv - 0.05, 2), "pmv_east": round(pmv + 0.08, 2),
+                "pmv_south": round(pmv + 0.12, 2), "pmv_west": round(pmv + 0.04, 2), "pmv_plenum": round(pmv + 0.35, 2),
+                "power_core": round(power_kw * 0.35, 2), "power_north": round(power_kw * 0.2, 2), "power_east": round(power_kw * 0.18, 2),
+                "power_south": round(power_kw * 0.17, 2), "power_west": round(power_kw * 0.1, 2),
+            })
+
+        rows.append(row)
+
 
 
     df = pd.DataFrame(rows)
