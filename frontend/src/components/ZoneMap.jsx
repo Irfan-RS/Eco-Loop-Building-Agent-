@@ -1,23 +1,41 @@
 import React, { useState, useMemo } from 'react';
 import { Layers, Thermometer, ShieldCheck, Zap, Activity, Info, Compass, Play, Loader2 } from 'lucide-react';
 
+// Format a raw safe key (e.g. "core_bottom", "perimeter_top_zn_3") into a display label
+function formatZoneName(id) {
+  return id
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bZn\b/g, 'Zone')
+    .replace(/\bBot\b/g, 'Bottom');
+}
+
 function describeZone(id) {
   const name = id.toLowerCase();
-  if (name.includes('plenum')) return 'Return Air Ceiling Plenum';
-  if (name.includes('core')) return 'Core Zone (High Internal Gains)';
-  if (name.includes('attic') || name.includes('roof')) return 'Attic / Roof Zone';
-  if (name.includes('basement') || name.includes('ground')) return 'Basement / Ground Floor';
-  if (name.includes('south') || name.includes('_s_') || name.includes('_3')) return 'South Exposure (Direct Solar Load)';
-  if (name.includes('north') || name.includes('_n_') || name.includes('_1')) return 'North Exposure (Shaded Boundary)';
-  if (name.includes('east') || name.includes('_e_') || name.includes('_2')) return 'East Exposure (Morning Solar)';
-  if (name.includes('west') || name.includes('_w_') || name.includes('_4')) return 'West Exposure (Evening Solar)';
+  if (name.includes('plenum')) return 'Return Air Ceiling Plenum — unconditioned';
+  // Floor/level identifiers
+  const isTop = name.includes('top');
+  const isMid = name.includes('mid');
+  const isBot = name.includes('bot') || name.includes('bottom') || name.includes('first') || name.includes('floor');
+  const floorLabel = isTop ? 'Top Floor · ' : isMid ? 'Mid Floor · ' : isBot ? 'Bottom Floor · ' : '';
+  // Orientation
+  if (name.includes('core')) return `${floorLabel}Core Zone (High Internal Gains, VAV System)`;
+  if (name.includes('south') || name.includes('_3')) return `${floorLabel}South Perimeter (Direct Solar Load)`;
+  if (name.includes('north') || name.includes('_1')) return `${floorLabel}North Perimeter (Shaded Boundary)`;
+  if (name.includes('east')  || name.includes('_2')) return `${floorLabel}East Perimeter (Morning Solar Gain)`;
+  if (name.includes('west')  || name.includes('_4')) return `${floorLabel}West Perimeter (Evening Solar Gain)`;
+  // Supermarket
+  if (name.includes('sales') || name.includes('salesfloor')) return 'Sales Floor (Refrigeration + HVAC Load)';
+  if (name.includes('backroom') || name.includes('back')) return 'Back Room (Storage + Equipment Load)';
+  // 5ZoneAirCooled
   if (name.includes('space1')) return 'Perimeter South (Direct Solar Load)';
-  if (name.includes('space2')) return 'Core Zone (High Internal Gains)';
+  if (name.includes('space2')) return 'Perimeter East (Morning Solar Gain)';
   if (name.includes('space3')) return 'Perimeter North (Shaded Exposure)';
-  if (name.includes('space4')) return 'Perimeter East (Morning Solar)';
-  if (name.includes('space5')) return 'Perimeter West (Evening Solar)';
-  return `Thermal Zone (${id})`;
+  if (name.includes('space4')) return 'Perimeter West (Evening Solar Gain)';
+  if (name.includes('space5')) return 'Central Core Zone';
+  return `Thermal Zone — ${formatZoneName(id)}`;
 }
+
 
 export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryData = null, baselineData = [], aiData = [], modelInfo = null }) {
   const [selectedLevel, setSelectedLevel] = useState(1);
@@ -34,18 +52,31 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
 
   const fmt = (val, d = 2) => (val !== undefined && val !== null ? Number(val).toFixed(d) : '0.00');
 
-  // Derive complete active zones list dynamically for ANY building model
+  // Derive zone IDs from CSV telemetry (temp_ columns) or fall back to modelInfo
   const allZoneIds = useMemo(() => {
-    const sourceData = (aiData && aiData.length > 0) ? aiData : (baselineData && baselineData.length > 0 ? baselineData : (telemetryData || []));
+    const sourceData = (aiData && aiData.length > 0) ? aiData
+      : (baselineData && baselineData.length > 0 ? baselineData
+      : (telemetryData || []));
+
     if (sourceData.length > 0) {
-      const keys = Object.keys(sourceData[0]).filter(k => k.startsWith('temp_')).map(k => k.replace('temp_', ''));
+      const keys = Object.keys(sourceData[0])
+        .filter(k => k.startsWith('temp_'))
+        .map(k => k.replace('temp_', ''))
+        .filter(k => k.length > 0);
       if (keys.length > 0) return keys;
     }
+
+    // No CSV data yet — use modelInfo.zones (original IDF names), converted to safe keys
     if (modelInfo && modelInfo.zones && modelInfo.zones.length > 0) {
-      return modelInfo.zones;
+      return modelInfo.zones
+        .filter(z => !z.toLowerCase().includes('plenum'))
+        .map(z => z.replace(/ /g, '_').replace(/-/g, '_').toLowerCase());
     }
-    return ['SPACE1-1', 'SPACE2-1', 'SPACE3-1', 'SPACE4-1', 'SPACE5-1', 'PLENUM-1'];
+
+    // Last resort: 5-zone defaults
+    return ['space1_1', 'space2_1', 'space3_1', 'space4_1', 'space5_1'];
   }, [aiData, baselineData, telemetryData, modelInfo]);
+
 
   // Default active selectedZoneId
   const activeZoneId = selectedZoneId && allZoneIds.includes(selectedZoneId) ? selectedZoneId : allZoneIds[0];
@@ -123,10 +154,20 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
     );
   }
 
-  // Filter level zones if medium office
+  // For medium office: filter by floor level using safe-key naming convention
   const levelZones = isMediumOffice
-    ? allZoneIds.filter(z => selectedLevel === 3 ? z.includes('top') : selectedLevel === 2 ? z.includes('mid') : (z.includes('bot') || z.includes('bottom') || z.includes('First') || !z.includes('_')))
+    ? allZoneIds.filter(z => {
+        const n = z.toLowerCase();
+        if (selectedLevel === 3) return n.includes('top');
+        if (selectedLevel === 2) return n.includes('mid');
+        // Level 1: bottom / first / core without top/mid
+        return n.includes('bot') || n.includes('bottom') || n.includes('first') || (!n.includes('top') && !n.includes('mid') && n.includes('core'));
+      })
     : allZoneIds;
+
+  // If filter returns nothing (e.g. 5Zone has no levels), show all
+  const displayZones = (levelZones.length > 0) ? levelZones : allZoneIds;
+
 
   return (
     <div style={{ marginTop: '24px' }}>
@@ -197,7 +238,8 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
 
           {/* Dynamic Interactive Zone Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', background: '#090D16', padding: '16px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-            {(levelZones.length > 0 ? levelZones : allZoneIds).map(zId => {
+            {(displayZones.length > 0 ? displayZones : allZoneIds).map(zId => {
+
               const live = getZoneLive(zId);
               const colors = getZoneColor(zId);
               const isSelected = activeZoneId === zId;
@@ -220,7 +262,7 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
                   }}
                 >
                   <div style={{ fontSize: '0.78rem', fontWeight: 800, marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {zId}
+                    {formatZoneName(zId)}
                   </div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#F8FAFC' }}>
                     {fmt(live.temp, 2)} °C
@@ -249,7 +291,7 @@ export default function ZoneMap({ modelName = '5ZoneAirCooled.idf', telemetryDat
           </div>
 
           <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#F8FAFC', marginBottom: '4px' }}>
-            {selectedZone.id}
+            {formatZoneName(selectedZone.id)}
           </h3>
           <p style={{ fontSize: '0.84rem', color: '#94A3B8', marginBottom: '16px' }}>
             {selectedZone.name}
