@@ -1,0 +1,6 @@
+# Tell Vercel to ignore Python files and requirements.txt so it only builds Vite static frontend
+requirements.txt
+server/
+agent/
+*.py
+.venv/
