@@ -101,9 +101,6 @@ export default function App() {
 
       if (resMetrics.status === 'success') {
         setMetrics(resMetrics);
-        if (resMetrics.active_config) {
-          setActiveConfig(resMetrics.active_config);
-        }
       } else {
         // No data yet — don't show stale/dummy, keep metrics null
         setMetrics(null);
