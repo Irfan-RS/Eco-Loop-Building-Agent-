@@ -103,7 +103,7 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
               </span>
             </div>
             <h2 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#F8FAFC', margin: '8px 0 0 0', letterSpacing: '-0.4px' }}>
-              Energy Consumption Comparison: Without AI vs. With AI
+              Energy Consumption & Comfort Metrics: Without AI vs. With AI
             </h2>
           </div>
 
@@ -184,10 +184,10 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
           <div>
             <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
               <Layers size={22} color="#10B981" />
-              Per-Zone Closed-Loop Analytics Inspector
+              Per-Zone Live Physics Metrics Inspector
             </h2>
             <p style={{ fontSize: '0.86rem', color: '#94A3B8', margin: '4px 0 0 0' }}>
-              Inspect live telemetry, 3 core targets evaluation, ECM control decisions, and forward memory injection for each thermal zone.
+              Inspect live zone temperatures, PMV comfort scores, peak demand power, carbon intensity, and dynamic setpoints.
             </p>
           </div>
 
@@ -241,230 +241,162 @@ export default function ZoneAnalytics({ baselineData = [], aiData = [], modelNam
         </div>
       </div>
 
-      {/* THE 4 CLOSED-LOOP STEPS DISPLAY FOR SELECTED ZONE */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(600px, 1fr))', gap: '20px' }}>
+      {/* REORGANIZED PHYSICAL METRIC CARDS (NO STEP HEADINGS) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(540px, 1fr))', gap: '20px' }}>
 
         {/* ==================================================================== */}
-        {/* STEP 1: FEEDBACK - LIVE TELEMETRY METRICS STREAMING */}
+        {/* SECTION 1: THERMAL COMFORT & AIR QUALITY (ASHRAE 55 PMV) */}
         {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#06B6D4', textTransform: 'uppercase', tracking: '0.08em', background: 'rgba(6, 182, 212, 0.12)', padding: '4px 10px', borderRadius: '6px' }}>
-              STEP 1: FEEDBACK
-            </span>
-            <span style={{ fontSize: '0.82rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Radio size={14} color="#10B981" /> Live EnergyPlus Telemetry Stream
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Activity size={20} color="#06B6D4" />
+              Thermal Comfort & Air Quality ({selectedZone})
+            </h3>
+            <span className={pmvCompliant ? 'badge badge-success' : 'badge badge-warning'}>
+              {pmvCompliant ? '100% ASHRAE 55 Compliant' : 'Comfort Limit'}
             </span>
           </div>
 
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Activity size={20} color="#06B6D4" />
-            Zone Telemetry ({selectedZone}): Without AI vs With AI
-          </h3>
-
-          {/* Telemetry Comparison Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            
-            {/* Without AI (Baseline) */}
+            {/* Without AI */}
             <div style={{ background: 'rgba(239, 68, 68, 0.08)', borderRadius: '12px', padding: '16px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#EF4444', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>🔴 Without AI (Baseline)</span>
-                <span className="badge badge-danger" style={{ fontSize: '0.72rem' }}>Static Schedule</span>
+              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#EF4444', marginBottom: '10px' }}>
+                🔴 Without AI (Baseline)
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.86rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Zap size={14} /> Energy Consumed:</span>
-                  <strong style={{ color: '#EF4444' }}>{fmt(baseMetrics.kwh, 2)} kWh</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Thermometer size={14} /> Zone Air Temp:</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.86rem', color: '#94A3B8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Thermometer size={14} /> Air Temp:</span>
                   <strong style={{ color: '#F8FAFC' }}>{fmt(baseMetrics.temp, 2)} °C</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Droplets size={14} /> Relative Humidity:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{fmt(baseMetrics.humidity, 1)} %</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Droplets size={14} /> Air Humidity:</span>
+                  <strong style={{ color: '#F8FAFC' }}>{fmt(baseMetrics.humidity, 1)} % RH</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Activity size={14} /> PMV Comfort Index:</span>
-                  <strong style={{ color: '#EF4444' }}>{baseMetrics.pmv > 0.4 ? `+${fmt(baseMetrics.pmv, 2)} (Warm)` : fmt(baseMetrics.pmv, 2)}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Activity size={14} /> PMV Index:</span>
+                  <strong style={{ color: '#EF4444' }}>+{fmt(baseMetrics.pmv, 2)} (Warm)</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Users size={14} /> Occupant Count:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{baseMetrics.occ} occupants</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Users size={14} /> Occupancy:</span>
+                  <strong style={{ color: '#F8FAFC' }}>{baseMetrics.occ} People</strong>
                 </div>
               </div>
             </div>
 
-            {/* With AI (Agent-Controlled) */}
+            {/* With AI */}
             <div style={{ background: 'rgba(16, 185, 129, 0.08)', borderRadius: '12px', padding: '16px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10B981', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>🟢 With AI (EcoLoop Agent)</span>
-                <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>Dynamic Closed-Loop</span>
+              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10B981', marginBottom: '10px' }}>
+                🟢 With AI (EcoLoop MCP)
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.86rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Zap size={14} /> Energy Consumed:</span>
-                  <strong style={{ color: '#34D399' }}>{fmt(aiMetrics.kwh, 2)} kWh</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Thermometer size={14} /> Zone Air Temp:</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.86rem', color: '#94A3B8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Thermometer size={14} /> Air Temp:</span>
                   <strong style={{ color: '#34D399' }}>{fmt(aiMetrics.temp, 2)} °C</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Droplets size={14} /> Relative Humidity:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{fmt(aiMetrics.humidity, 1)} %</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Droplets size={14} /> Air Humidity:</span>
+                  <strong style={{ color: '#F8FAFC' }}>{fmt(aiMetrics.humidity, 1)} % RH</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Activity size={14} /> PMV Comfort Index:</span>
-                  <strong style={{ color: pmvCompliant ? '#34D399' : '#F59E0B' }}>
-                    {aiMetrics.pmv >= 0 ? `+${fmt(aiMetrics.pmv, 2)}` : fmt(aiMetrics.pmv, 2)} ({pmvCompliant ? 'Optimal Comfort' : 'Boundary'})
-                  </strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Activity size={14} /> PMV Index:</span>
+                  <strong style={{ color: '#34D399' }}>+{fmt(aiMetrics.pmv, 2)} (Optimal)</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94A3B8' }}>
-                  <span><Users size={14} /> Occupant Count:</span>
-                  <strong style={{ color: '#F8FAFC' }}>{aiMetrics.occ} occupants</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span><Users size={14} /> Occupancy:</span>
+                  <strong style={{ color: '#F8FAFC' }}>{aiMetrics.occ} People</strong>
                 </div>
               </div>
             </div>
-
           </div>
         </div>
 
         {/* ==================================================================== */}
-        {/* STEP 2: REASONING - 3 CORE TARGETS EVALUATION */}
+        {/* SECTION 2: ELECTRICITY POWER DEMAND & PEAK THROTTLING */}
         {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#A855F7', textTransform: 'uppercase', tracking: '0.08em', background: 'rgba(168, 85, 247, 0.12)', padding: '4px 10px', borderRadius: '6px' }}>
-              STEP 2: REASONING
-            </span>
-            <span style={{ fontSize: '0.82rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Cpu size={14} color="#A855F7" /> LLM Target Evaluation Engine
-            </span>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Zap size={20} color="#A855F7" />
+              Power Demand & Peak Load Throttling
+            </h3>
+            <span className="badge badge-info">14:00 - 18:00 Tariff Throttling</span>
           </div>
 
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck size={20} color="#A855F7" />
-            Evaluation of 3 Core Targets ({selectedZone})
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
-            {/* Target 1: Thermal Comfort */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', padding: '12px 16px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  🧘 1. Thermal Comfort Target (ASHRAE 55)
-                </span>
-                <span className={pmvCompliant ? 'badge badge-success' : 'badge badge-warning'} style={{ fontSize: '0.74rem' }}>
-                  {pmvCompliant ? '100% Compliant' : 'Near Limit'}
-                </span>
-              </div>
-              <p style={{ fontSize: '0.82rem', color: '#94A3B8', margin: 0 }}>
-                Target: Enforce Fanger PMV index between <strong>-0.5 and +0.5</strong>. Current PMV is <strong>{fmt(aiMetrics.pmv, 2)}</strong>.
-              </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>🔴 Baseline Power Demand:</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#F43F5E' }}>{fmt(baseMetrics.power, 2)} kW</div>
             </div>
 
-            {/* Target 2: Peak Demand Throttling */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', padding: '12px 16px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ⚡ 2. Peak Electricity Demand Target
-                </span>
-                <span className="badge badge-info" style={{ fontSize: '0.74rem' }}>
-                  14:00 - 18:00 Tariff Throttling
-                </span>
-              </div>
-              <p style={{ fontSize: '0.82rem', color: '#94A3B8', margin: 0 }}>
-                Target: Cut peak kW load during high grid tariff window. Power cut: <strong style={{ color: '#34D399' }}>-{fmt(baseMetrics.power - aiMetrics.power, 2)} kW ({fmt(peakPctCut, 1)}% Peak Cut)</strong>.
-              </p>
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#34D399', marginBottom: '4px' }}>🟢 AI Power Demand:</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#34D399' }}>{fmt(aiMetrics.power, 2)} kW</div>
             </div>
+          </div>
 
-            {/* Target 3: Carbon Intensity Minimization */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', padding: '12px 16px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  🌱 3. Carbon Emissions Minimization Target
-                </span>
-                <span className="badge badge-success" style={{ fontSize: '0.74rem' }}>
-                  Pre-Cooling Active
-                </span>
-              </div>
-              <p style={{ fontSize: '0.82rem', color: '#94A3B8', margin: 0 }}>
-                Target: Shift HVAC load to low-carbon morning hours (06:00-08:00). Cumulative CO2 saved: <strong style={{ color: '#34D399' }}>{fmt(co2SavedKg, 2)} kg CO2e</strong>.
-              </p>
-            </div>
-
+          <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(168, 85, 247, 0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', fontWeight: 700 }}>
+            <span style={{ color: '#C084FC' }}>⚡ Instantaneous Peak kW Cut:</span>
+            <span style={{ color: '#34D399' }}>-{fmt(baseMetrics.power - aiMetrics.power, 2)} kW ({fmt(peakPctCut, 1)}% Cut)</span>
           </div>
         </div>
 
         {/* ==================================================================== */}
-        {/* STEP 3: CONTROL ACTION - OPTIMAL ECM & SETPOINT DECISIONS */}
+        {/* SECTION 3: GRID CARBON INTENSITY & EMISSIONS */}
+        {/* ==================================================================== */}
+        <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Leaf size={20} color="#10B981" />
+              Grid Carbon Intensity & Energy Use
+            </h3>
+            <span className="badge badge-success">Pre-Cooling Strategy Active</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>⚡ Cumulative Energy Consumed:</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#34D399' }}>{fmt(aiKwh, 2)} kWh <span style={{ fontSize: '0.76rem', color: '#94A3B8' }}>(vs {fmt(baseKwh, 2)} kWh)</span></div>
+            </div>
+
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>🌱 Avoided Carbon Emissions:</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#34D399' }}>{fmt(co2SavedKg, 2)} kg CO2e</div>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: '#94A3B8', margin: 0, lineHeight: 1.5 }}>
+            💡 Shifts HVAC thermal load to low-carbon morning windows (06:00-08:00) before peak grid carbon intensity spikes.
+          </p>
+        </div>
+
+        {/* ==================================================================== */}
+        {/* SECTION 4: THERMOSTAT SETPOINTS & ACTUATOR MEMORY INJECTION */}
         {/* ==================================================================== */}
         <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#F59E0B', textTransform: 'uppercase', tracking: '0.08em', background: 'rgba(245, 158, 11, 0.12)', padding: '4px 10px', borderRadius: '6px' }}>
-              STEP 3: CONTROL ACTION
-            </span>
-            <span style={{ fontSize: '0.82rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Zap size={14} color="#F59E0B" /> Computed ECM Strategy
-            </span>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Flame size={20} color="#F59E0B" />
+              Dynamic Setpoints & PyEnergyPlus C Actuator Injection
+            </h3>
+            <span className="badge badge-warning">Live Memory Override</span>
           </div>
 
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Flame size={20} color="#F59E0B" />
-            Optimal Energy Conservation Measure (ECM)
-          </h3>
-
-          <div style={{ background: 'rgba(245, 158, 11, 0.08)', borderRadius: '12px', padding: '16px', border: '1px solid rgba(245, 158, 11, 0.3)', marginBottom: '14px' }}>
-            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#F59E0B', marginBottom: '6px' }}>
-              🎯 Selected Strategy: Dynamic Thermostat Setpoint Reset
-            </div>
-            <p style={{ fontSize: '0.84rem', color: '#CBD5E1', margin: 0, lineHeight: 1.5 }}>
-              The LLM Agent evaluated thermal comfort (+0.12 PMV) against peak tariff power demand and computed an optimal setpoint adjustment:
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.86rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ color: '#94A3B8', marginBottom: '4px' }}>❄️ Target Cooling Setpoint:</div>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>❄️ Target Cooling Setpoint:</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#34D399' }}>{fmt(aiMetrics.clg, 1)} °C <span style={{ fontSize: '0.78rem', color: '#94A3B8', fontWeight: 400 }}>(vs {fmt(baseMetrics.clg, 1)} °C Baseline)</span></div>
             </div>
 
             <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ color: '#94A3B8', marginBottom: '4px' }}>🔥 Target Heating Setpoint:</div>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: '4px' }}>🔥 Target Heating Setpoint:</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#FF6B6B' }}>{fmt(aiMetrics.htg, 1)} °C <span style={{ fontSize: '0.78rem', color: '#94A3B8', fontWeight: 400 }}>(vs {fmt(baseMetrics.htg, 1)} °C Baseline)</span></div>
             </div>
           </div>
-        </div>
 
-        {/* ==================================================================== */}
-        {/* STEP 4: FORWARD INJECTION - MEMORY HANDLE ACTUATOR OVERRIDES */}
-        {/* ==================================================================== */}
-        <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase', tracking: '0.08em', background: 'rgba(16, 185, 129, 0.12)', padding: '4px 10px', borderRadius: '6px' }}>
-              STEP 4: FORWARD INJECTION
-            </span>
-            <span style={{ fontSize: '0.82rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Clock size={14} color="#10B981" /> Sub-Hourly PyEnergyPlus API Override
-            </span>
-          </div>
-
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#F8FAFC', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle2 size={20} color="#10B981" />
-            PyEnergyPlus Actuator Memory Handle Injection
-          </h3>
-
-          <div style={{ background: 'rgba(15, 23, 42, 0.7)', borderRadius: '12px', padding: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '0.82rem', fontFamily: 'monospace', color: '#CBD5E1', lineHeight: 1.6 }}>
+          <div style={{ background: 'rgba(15, 23, 42, 0.7)', borderRadius: '10px', padding: '12px 14px', border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '0.78rem', fontFamily: 'monospace', color: '#CBD5E1', lineHeight: 1.5 }}>
             <div><span style={{ color: '#06B6D4' }}>api.exchange.set_actuator_value</span>(state, cooling_handle, <span style={{ color: '#34D399' }}>{fmt(aiMetrics.clg, 1)}</span>)</div>
             <div><span style={{ color: '#06B6D4' }}>api.exchange.set_actuator_value</span>(state, heating_handle, <span style={{ color: '#FF6B6B' }}>{fmt(aiMetrics.htg, 1)}</span>)</div>
-            <div style={{ color: '#64748B', marginTop: '6px' }}>// Setpoints injected directly into PyEnergyPlus heat balance loop</div>
-          </div>
-
-          <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', color: '#34D399', fontWeight: 700, background: 'rgba(16, 185, 129, 0.1)', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-            <span>✅ Actuator Injection Successful ({selectedZone})</span>
-            <span>Loop Closed ⚡</span>
           </div>
         </div>
 
