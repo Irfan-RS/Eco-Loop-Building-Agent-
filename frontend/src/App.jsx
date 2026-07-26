@@ -101,15 +101,8 @@ export default function App() {
       ]);
 
       if (resMetrics.status === 'success') {
-        // Guard: only show data that belongs to the currently selected model+weather
-        if (resMetrics.data_model === cfg.model && resMetrics.data_weather === cfg.weather) {
-          setMetrics(resMetrics);
-        } else {
-          // Data is for a different config — clear to avoid stale display
-          setMetrics(null);
-        }
+        setMetrics(resMetrics);
       } else {
-        // no_data or running — keep metrics null so "Click Calculate" state shows
         setMetrics(null);
       }
       if (resModel.status === 'success') setModelInfo(resModel);

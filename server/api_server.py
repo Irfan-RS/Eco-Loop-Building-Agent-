@@ -323,29 +323,6 @@ def get_metrics(model: str = None, weather: str = None):
             "active_config": active_config,
         }
 
-    meta_file = outputs_folder / "latest_run_meta.json"
-
-    # Check if latest_run_meta exists and matches requested model & weather
-    if meta_file.exists():
-        try:
-            with open(meta_file, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            # If the run metadata doesn't match requested model/weather, treat as no_data
-            if meta.get("model") != target_model or meta.get("weather") != target_weather:
-                return {
-                    "status": "no_data",
-                    "message": f"Building configuration changed to {target_model}. Click Calculate to run simulation.",
-                    "active_config": active_config,
-                }
-        except Exception:
-            pass
-    else:
-        return {
-            "status": "no_data",
-            "message": "No simulation data found. Click Calculate to run EnergyPlus simulation.",
-            "active_config": active_config,
-        }
-
     base_file = outputs_folder / "baseline_metrics.csv"
     ai_file = outputs_folder / "aicontrolled_metrics.csv"
 
@@ -356,9 +333,15 @@ def get_metrics(model: str = None, weather: str = None):
             "active_config": active_config,
         }
 
-
-    df_base = pd.read_csv(base_file)
-    df_ai = pd.read_csv(ai_file)
+    try:
+        df_base = pd.read_csv(base_file)
+        df_ai = pd.read_csv(ai_file)
+    except Exception as err:
+        return {
+            "status": "no_data",
+            "message": f"Error reading simulation CSV metrics: {err}",
+            "active_config": active_config,
+        }
 
 
 
